@@ -1,0 +1,2243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NutriSense App Prototype</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for Growth Tracker Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- QR Code Generator Library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <!-- LeafletJS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .figma-container {
+            width: 100%;
+            max-width: 420px;
+            height: 890px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.15), 0 0 0 12px #1f2937;
+            border-radius: 40px;
+            overflow: hidden;
+            position: relative;
+        }
+        .figma-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f8fafc;
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            transform: translateX(100%);
+            overflow-y: auto;
+            padding-bottom: 80px; /* Ensure space for bottom nav */
+        }
+        .figma-screen.active { transform: translateX(0); }
+        .figma-screen.inactive-left { transform: translateX(-100%); }
+        .status-bar { height: 44px; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-size: 15px; font-weight: 600; position: absolute; top: 0; left: 0; z-index: 1000; color: #1f2937; }
+        .bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; height: 80px; background-color: rgba(255,255,255,0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid #e5e7eb; display: flex; justify-content: space-around; align-items: center; z-index: 1000; }
+        .nav-btn.active svg, .nav-btn.active p { color: #2563eb; }
+        .tab-btn.active { border-bottom-color: #2563eb; color: #2563eb; font-weight: 600; }
+        .scroll-hidden::-webkit-scrollbar { display: none; }
+        .scroll-hidden { -ms-overflow-style: none; scrollbar-width: none; }
+        #map, #droneMap { height: 100%; width: 100%; z-index: 5;}
+        .leaflet-popup-content-wrapper { border-radius: 12px; }
+        
+        .game-piece { transition: transform 0.2s; }
+        .game-piece:hover { transform: scale(1.1); }
+        .pin-dot { transition: background-color 0.2s; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        .shake { animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both; }
+
+        @keyframes scan-anim {
+            0% { top: -10%; opacity: 0.5; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0.5; }
+        }
+        .scanning-line {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: #3b82f6;
+            box-shadow: 0 0 10px #3b82f6;
+            animation: scan-anim 2.5s infinite ease-out;
+        }
+
+        @keyframes fill-anim {
+            0% { height: 0%; }
+            100% { height: 100%; }
+        }
+        @keyframes checkmark-anim {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Notification styles */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { transform: scale(1.2); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        }
+        .notification-bell.new::after {
+            content: '';
+            position: absolute;
+            top: 1px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            border: 1.5px solid white;
+            animation: pulse 1.5s infinite;
+        }
+        #notificationPanel {
+            transition: opacity 0.3s ease-in-out;
+        }
+        #notificationContainer {
+            transition: transform 0.3s ease-in-out;
+        }
+        .notification-item.unread {
+            background-color: #e0e7ff;
+        }
+
+        /* New styles for futuristic UI */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 1s ease-out forwards;
+        }
+
+        @keyframes subtle-gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .animated-gradient-bg {
+            background: linear-gradient(-45deg, #1f2937, #3b82f6, #4b5563, #1e3a8a);
+            background-size: 400% 400%;
+            animation: subtle-gradient 15s ease infinite;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .glow-btn {
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px rgba(59, 130, 246, 0), 0 0 10px rgba(59, 130, 246, 0);
+        }
+
+        .glow-btn:hover, .glow-btn:focus {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.7), 0 0 25px rgba(59, 130, 246, 0.5);
+        }
+
+        #fingerprint-container-new {
+            transition: all 0.3s ease;
+        }
+
+        #fingerprint-container-new:hover {
+            transform: scale(1.05);
+        }
+
+        #fingerprint-container-new .fingerprint-ridges {
+            transition: opacity 0.5s ease;
+        }
+
+        #fingerprint-container-new .scan-ring {
+            stroke-dasharray: 327; /* Circumference of a circle with r=52 (2 * PI * 52) */
+            stroke-dashoffset: 327;
+            opacity: 0;
+        }
+
+        #fingerprint-container-new.scanning .scan-ring {
+            opacity: 1;
+            animation: scan-ring-anim 2s ease-out forwards;
+        }
+        
+        @keyframes scan-ring-anim {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        #fingerprint-container-new.success .fingerprint-ridges,
+        #fingerprint-container-new.success .scan-ring {
+            opacity: 0;
+        }
+
+        #fingerprint-container-new.success #checkmark-icon {
+            display: block;
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: checkmark-anim 0.5s ease-out forwards;
+            animation-delay: 0.2s;
+        }
+
+        @keyframes pulse-glow {
+            0% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            }
+        }
+
+        .pulse-btn {
+            animation: pulse-glow 2s infinite;
+        }
+
+        /* Leaflet glowing path */
+        .leaflet-path.glow-route-shadow {
+            filter: drop-shadow(0 0 5px #3b82f6);
+        }
+        .leaflet-path.glow-route {
+            stroke: #67e8f9;
+        }
+
+        /* Custom popup styling */
+        .custom-leaflet-popup .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.9);
+            color: #1f2937;
+            border-radius: 12px;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+        .custom-leaflet-popup .leaflet-popup-content {
+            margin: 0;
+            padding: 0; /* Let inner content define padding */
+            width: auto !important;
+        }
+        .custom-leaflet-popup .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .leaflet-control.legend {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            line-height: 1.4;
+        }
+        .legend i {
+            width: 12px;
+            height: 12px;
+            float: left;
+            margin-right: 8px;
+            border-radius: 50%;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 flex items-center justify-center min-h-screen p-4 sm:p-8">
+
+    <div class="figma-container bg-f8fafc">
+        
+        <!-- All Screens Container. Holds both signup and main app screens -->
+        <div id="appView" class="w-full h-full relative">
+            <!-- Screens are injected here by JavaScript -->
+        </div>
+        
+        <!-- This is a container for elements that should appear on top of all screens, like the nav bar and chatbot -->
+        <div id="chrome" class="hidden">
+            <!-- Status Bar -->
+            <div class="status-bar" id="statusBar">
+                <span id="currentTime"></span>
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-reception-4" viewBox="0 0 16 16"><path d="M0 11.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2zm4-3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-5zm4-3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-8zm4-3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-11z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-wifi" viewBox="0 0 16 16"><path d="M15.384 6.115a.485.485 0 0 0-.047-.736A12.444 12.444 0 0 0 8 3C5.259 3 2.723 3.882.663 5.379a.485.485 0 0 0-.048.736.518.518 0 0 0 .732.05c1.86-1.323 4.212-2.13 6.653-2.13s4.793.807 6.653 2.13a.518.518 0 0 0 .732-.05z"/><path d="M13.229 8.271a.482.482 0 0 0-.063-.745A9.455 9.455 0 0 0 8 6c-2.187 0-4.134.7-5.686 1.826a.482.482 0 0 0-.063.745.525.525 0 0 0 .737.065 8.46 8.46 0 0 1 5.01-1.663 8.46 8.46 0 0 1 5.01 1.663.525.525 0 0 0 .737-.065z"/><path d="M11.072 10.424a.483.483 0 0 0-.08-.753A6.462 6.462 0 0 0 8 8.5c-1.71 0-3.236.56-4.503 1.481a.483.483 0 0 0-.08.753.54.54 0 0 0 .742.078 5.46 5.46 0 0 1 3.84-1.343 5.46 5.46 0 0 1 3.84 1.343.54.54 0 0 0 .742-.078z"/><path d="M9.03 12.574a.483.483 0 0 0-.1-.76A3.462 3.462 0 0 0 8 11c-.863 0-1.65.29-2.28.714a.483.483 0 0 0-.1.76.54.54 0 0 0 .748.085A2.46 2.46 0 0 1 8 12a2.46 2.46 0 0 1 1.282.424.54.54 0 0 0 .748-.085z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-battery-full" viewBox="0 0 16 16"><path d="M2 6h10v4H2V6z"/><path d="M2 4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H2zm12 1a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-1v-4h1z"/></svg>
+                </div>
+            </div>
+
+            <!-- Floating Action Button for AI Chatbot -->
+            <div id="chatbotFab" class="absolute bottom-24 right-6 z-[1001]">
+                <button class="w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-transform transform hover:scale-110" data-target="aiChatbot">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Bottom Navigation -->
+            <div class="bottom-nav">
+                <!-- Navigation buttons will be dynamically generated here -->
+            </div>
+        </div>
+        
+        <!-- Consultation History Modal -->
+        <div id="consultationModal" class="hidden absolute inset-0 bg-black/40 z-[1001]">
+            <div id="consultationPanel" class="absolute bottom-0 left-0 w-full bg-gray-50 rounded-t-2xl p-6 transform translate-y-full transition-transform duration-300 ease-in-out" style="max-height: 80vh;">
+                <div class="flex justify-between items-center mb-4 pb-4 border-b">
+                    <h2 class="text-xl font-bold text-gray-800">Past Consultations</h2>
+                    <button id="closeConsultationBtn" class="p-1 rounded-full hover:bg-gray-200">
+                        <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div id="consultationList" class="space-y-3 overflow-y-auto" style="max-height: calc(80vh - 100px);">
+                    <!-- Content will be injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Panel -->
+        <div id="notificationPanel" class="hidden absolute inset-0 bg-black/30 z-[1002]">
+            <div id="notificationContainer" class="absolute top-0 left-0 right-0 mx-auto max-w-full bg-gray-50/95 backdrop-blur-lg rounded-b-2xl shadow-lg p-4 pt-20 transform -translate-y-full transition-transform duration-300 ease-in-out" style="max-height: 70vh;">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">Notifications</h2>
+                    <button id="closeNotificationBtn" class="p-1 rounded-full hover:bg-gray-200">
+                        <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div id="notificationList" class="space-y-3 overflow-y-auto" style="max-height: calc(70vh - 120px);">
+                    <!-- Notifications injected here -->
+                </div>
+                <div class="mt-4 pt-4 border-t">
+                    <button id="markAllReadBtn" class="w-full text-center text-blue-600 font-semibold text-sm py-2">Mark all as read</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- QR Code Modal -->
+    <div id="qrModal" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center z-[2000] p-4">
+        <div class="bg-white rounded-2xl p-6 relative w-full max-w-sm text-center">
+            <button id="closeQrBtn" class="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-700 hover:bg-gray-100 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 class="font-bold text-lg mb-2">Health History QR Code</h3>
+            <p class="text-xs text-gray-500 mb-4">Scannable by registered hospitals for instant access.</p>
+            <canvas id="largeQrCanvas" class="mx-auto"></canvas>
+        </div>
+    </div>
+
+    <!-- Leaflet JS for Map -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- GLOBAL STATE & APP DATA ---
+        let appState = {
+            // Profile Data
+            fullName: "Ananda Putra",
+            dob: "2022-05-15",
+            gender: "Male",
+            bloodType: "O+",
+            vaccinations: "BCG, DPT, Polio, Measles",
+            allergies: "None",
+            medicalHistory: "Born premature at 36 weeks.",
+            points: 1250,
+            consultationHistory: [
+                { doctor: "Dr. Indah Sari", hospital: "Siloam Hospital", date: "2025-09-15", summary: "General Checkup", notes: "Patient is healthy. Recommended to continue balanced diet." },
+                { doctor: "Dr. Budi Hartono", hospital: "NutriSense Clinic", date: "2025-08-20", summary: "Nutrition Follow-up", notes: "Discussed increasing iron intake. Patient is responding well to dietary changes." },
+                { doctor: "Dr. Siti Aminah", hospital: "Puskesmas Menteng", date: "2025-07-01", summary: "Vaccination Visit", notes: "Administered DPT booster. No adverse reactions." }
+            ],
+            // Growth Data
+            growthHistory: [
+                { date: "2024-08-01", height: 84.5, weight: 12.2 },
+                { date: "2024-09-01", height: 85.2, weight: 12.5 },
+                { date: "2024-10-01", height: 86.0, weight: 12.8 },
+            ],
+            // Other App Data
+            healthScore: 88,
+            appointments: [],
+            communityPosts: [
+                { author: "Anonymous Parent", time: "2 hours ago", avatar: "A", color: "pink", content: "My child refuses to eat vegetables. Any tips on how to make them more appealing?", replies: 2, likes: 10 }
+            ],
+            badges: [
+                { name: 'First Meal', icon: '🍲', unlocked: true, color: 'yellow' },
+                { name: 'First Consult', icon: '👨‍⚕️', unlocked: true, color: 'blue' },
+                { name: 'Growth Log', icon: '📈', unlocked: true, color: 'green' },
+                { name: 'Community Helper', icon: '🎗️', unlocked: false, color: 'pink' }
+            ],
+            notifications: [
+                { icon: '👨‍⚕️', text: 'New health consultation available.', time: '2m ago', read: false },
+                { icon: '🚁', text: 'Drone delivery arriving in 5 minutes.', time: '5m ago', read: false },
+                { icon: '📈', text: 'Weight and height data successfully synced.', time: '1h ago', read: true }
+            ],
+        };
+
+        const appView = document.getElementById('appView');
+        const chromeUI = document.getElementById('chrome');
+
+        let screenHistory = ['login'];
+        let growthChartInstance = null;
+        let map; // Define map variable in the global scope
+        
+        // --- DATA MOCKS ---
+        const recipes = [
+            { id: 1, name: 'Chicken & Carrot Porridge', category: 'immune-boost', calories: 180, protein: '15g', vitamins: 'A, B6', affordability: 'Affordable', image: '🍲', color: 'yellow', description: 'High in Protein & Vitamin A' },
+            { id: 2, name: 'Spinach & Sweet Potato Mash', category: 'weight-gain', calories: 220, protein: '5g', vitamins: 'A, C, Iron', affordability: 'Affordable', image: '🍠', color: 'orange', description: 'Rich in Iron & Fiber' },
+            { id: 3, name: 'Lentil Soup for Toddlers', category: 'stunting-prevention', calories: 190, protein: '12g', vitamins: 'Folate, Iron', affordability: 'Affordable', image: '🥣', color: 'red', description: 'Excellent source of plant-based protein' },
+            { id: 4, name: 'Fruity Yogurt Parfait', category: 'immune-boost', calories: 150, protein: '8g', vitamins: 'C, Calcium', affordability: 'Medium', image: '🍓', color: 'pink', description: 'Great for gut health' },
+            { id: 5, name: 'Salmon and Broccoli Bites', category: 'stunting-prevention', calories: 250, protein: '20g', vitamins: 'D, Omega-3', affordability: 'Premium', image: '🐟', color: 'teal', description: 'Boosts brain development' },
+        ];
+
+        const articles = [
+            { id: 1, title: 'Meal Prep for Toddlers', type: 'Article', readTime: '5 min read', icon: '📝', target: 'articleDetail' },
+            { id: 2, title: 'Success Story: Overcoming Stunting', type: 'Story', readTime: '7 min read', icon: '🌟', target: 'articleDetail' },
+            { id: 3, title: 'Why Hydration Matters for Kids', type: 'Video', readTime: '3 min watch', icon: '🎬', target: 'articleDetail' },
+            { id: 4, title: 'Nutrition Game for Kids', type: 'Game', readTime: 'Interactive', icon: '🎮', target: 'miniGame' },
+            { id: 5, title: 'Match the Food Group', type: 'Game', readTime: 'Interactive', icon: '🎨', target: 'foodGroupGame' }
+        ];
+
+        const doctors = [
+            { id: 1, name: 'Dr. Indah Sari', specialty: 'Pediatrician', language: 'Indonesian, English', status: 'Online', avatar: '👩‍⚕️' },
+            { id: 2, name: 'Dr. Budi Hartono', specialty: 'Nutritionist', language: 'Indonesian', status: 'Available at 3 PM', avatar: '👨‍⚕️' },
+            { id: 3, name: 'Dr. Siti Aminah', specialty: 'General Practitioner', language: 'Indonesian', status: 'Offline', avatar: '👩‍⚕️' },
+            { id: 4, name: 'Dr. David Lee', specialty: 'Pediatrician', language: 'English', status: 'Online', avatar: '👨‍⚕️' },
+        ];
+        
+        const facilities = [
+            { id: 7, type: 'NEXUS Locker', name: 'Senayan Branch', location: 'Plaza Senayan', lat: -6.2255, lng: 106.7983, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+07' },
+            { id: 12, type: 'NEXUS Locker', name: 'Kemanggisan Branch', location: 'Near Binus University', lat: -6.1950, lng: 106.7881, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+12' },
+            { id: 3, type: 'NEXUS Locker', name: 'Mangga Besar Branch', location: 'Mangga Besar Raya', lat: -6.1500, lng: 106.8200, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+03' },
+            { id: 9, type: 'NEXUS Locker', name: 'Kuningan Branch', location: 'Kuningan City Mall', lat: -6.2275, lng: 106.8290, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+09' },
+            { id: 5, type: 'NEXUS Locker', name: 'Pluit Branch', location: 'Pluit Village Mall', lat: -6.1150, lng: 106.7880, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+05' },
+            { id: 15, type: 'NEXUS Locker', name: 'Taman Anggrek', location: 'Mall Taman Anggrek', lat: -6.1783, lng: 106.7924, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+15' },
+            { id: 16, type: 'NEXUS Locker', name: 'Grand Indonesia', location: 'Grand Indonesia', lat: -6.1953, lng: 106.8219, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+16' },
+            { id: 17, type: 'NEXUS Locker', name: 'Pondok Indah', location: 'Pondok Indah Mall', lat: -6.2646, lng: 106.7834, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+17' },
+            { id: 18, type: 'NEXUS Locker', name: 'Central Park', location: 'Central Park Mall', lat: -6.1774, lng: 106.7907, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+18' },
+            { id: 19, type: 'NEXUS Locker', name: 'Kelapa Gading', location: 'Mall Kelapa Gading', lat: -6.1581, lng: 106.9084, img: 'https://placehold.co/200x100/e0f2fe/0c4a6e?text=Locker+19' }
+        ];
+
+        // --- SCREEN TEMPLATES ---
+        const screens = {
+            login: () => `
+                <div class="animated-gradient-bg p-8 flex flex-col h-full justify-between">
+                    <div class="text-center pt-16">
+                        <h1 class="text-5xl font-bold text-white fade-in" style="animation-delay: 0.2s;">NutriSense</h1>
+                        <p class="text-slate-300 mt-2 fade-in" style="animation-delay: 0.4s;">Your Child's Future, Secured.</p>
+                    </div>
+
+                    <div class="glass-card rounded-3xl p-8 mb-8 fade-in" style="animation-delay: 0.6s;">
+                        <div class="text-center">
+                            <p id="fingerprint-status" class="text-slate-200 font-medium mb-6">Tap to login securely</p>
+                            <div id="fingerprint-container-new" class="relative cursor-pointer w-40 h-40 mx-auto">
+                                <svg viewBox="0 0 120 120" class="w-full h-full">
+                                    <defs>
+                                        <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+                                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                            <feMerge>
+                                                <feMergeNode in="coloredBlur"/>
+                                                <feMergeNode in="SourceGraphic"/>
+                                            </feMerge>
+                                        </filter>
+                                        <radialGradient id="fingerprint-gradient">
+                                            <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.8"/>
+                                            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.6"/>
+                                        </radialGradient>
+                                    </defs>
+
+                                    <!-- Base glow and background -->
+                                    <circle cx="60" cy="60" r="50" fill="url(#fingerprint-gradient)" opacity="0.2" />
+                                    <circle cx="60" cy="60" r="56" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+
+                                    <!-- Realistic fingerprint ridges -->
+                                    <g class="fingerprint-ridges" stroke="rgba(255,255,255,0.7)" stroke-width="2.5" stroke-linecap="round" fill="none">
+                                        <path d="M60,25 C73.8,25 85,36.2 85,50 C85,58.2 80.3,65.4 73,69 M60,32 C68.8,32 76,39.2 76,48 C76,53.2 73.2,57.7 69,60.5 M35,48 C35,42.5 39.5,38 45,38 C50.5,38 55,42.5 55,48 C55,53.5 50.5,58 45,58 M42,75 C35.4,75 30,69.6 30,63 M48,78 C42.5,78 38,73.5 38,68 M60,85 C51.2,85 44,77.8 44,69 M60,78 C54.5,78 50,73.5 50,68 C50,62.5 54.5,58 60,58 C65.5,58 70,62.5 70,68 M80,60 C80,65.5 75.5,70 70,70" />
+                                    </g>
+
+                                    <!-- Scanning progress ring -->
+                                    <circle class="scan-ring" cx="60" cy="60" r="52" fill="none" stroke="#67e8f9" stroke-width="3" stroke-linecap="round" filter="url(#neon-glow)" transform="rotate(-90 60 60)" />
+
+                                    <!-- Success Checkmark -->
+                                    <path id="checkmark-icon" d="M40 60 L55 75 L80 45" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center fade-in" style="animation-delay: 0.8s;">
+                        <button class="glow-btn text-white font-semibold text-sm w-full bg-white/20 py-4 rounded-xl backdrop-blur-sm" data-target="pinLogin">Use PIN / Password</button>
+                    </div>
+                </div>`,
+            pinLogin: () => `
+                <div class="p-8 pt-24 text-center flex flex-col h-full bg-gradient-to-br from-blue-50 to-indigo-100">
+                    <h1 class="text-3xl font-bold text-gray-800">Enter Your PIN</h1>
+                    <div class="flex-grow flex flex-col justify-center items-center">
+                        <div id="pin-dots" class="flex gap-4 my-6">
+                            <div class="pin-dot w-4 h-4 bg-gray-300 rounded-full"></div>
+                            <div class="pin-dot w-4 h-4 bg-gray-300 rounded-full"></div>
+                            <div class="pin-dot w-4 h-4 bg-gray-300 rounded-full"></div>
+                            <div class="pin-dot w-4 h-4 bg-gray-300 rounded-full"></div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-6 w-full max-w-xs">
+                            ${[1,2,3,4,5,6,7,8,9,'',0,'del'].map(n => {
+                                if(n === 'del') return `<button class="pin-btn text-2xl font-bold text-gray-700 h-16 flex items-center justify-center" data-key="del"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 002.828 0L21 12M3 12l6.414-6.414a2 2 0 012.828 0L21 12"></path></svg></button>`;
+                                if(n === '') return `<div></div>`;
+                                return `<button class="pin-btn text-3xl font-bold text-gray-700 h-16 rounded-full hover:bg-gray-200/50" data-key="${n}">${n}</button>`
+                            }).join('')}
+                        </div>
+                    </div>
+                    <button class="text-blue-600 font-semibold text-sm" data-target="login">Use Fingerprint</button>
+                </div>`,
+            greeting: () => `
+                <div class="flex flex-col h-full p-8 text-center bg-gradient-to-br from-blue-50 to-indigo-100 justify-center items-center">
+                    <h1 id="greetingText" class="text-4xl font-bold text-gray-800 opacity-0 transform scale-90 transition-all duration-1000">
+                        Welcome, ${appState.fullName.split(' ')[0]} 👋
+                    </h1>
+                </div>`,
+            home: () => `
+                <div class="p-6 pt-20 overflow-y-auto scroll-hidden h-full">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-500">Welcome back,</p>
+                            <h1 id="userNameDisplay" class="text-3xl font-bold text-gray-800 capitalize">${appState.fullName.split(' ')[0]}</h1>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <div id="notificationBell" class="relative cursor-pointer text-gray-500 hover:text-gray-900">
+                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V5a1 1 0 00-2 0v.083A6 6 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                            </div>
+                            <div class="relative cursor-pointer" data-target="profile">
+                                 <div class="w-14 h-14 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                                     <span class="text-2xl font-bold text-gray-600">${appState.fullName.charAt(0).toUpperCase()}</span>
+                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="mt-8 bg-red-100 border border-red-200 text-red-800 p-4 rounded-2xl flex items-center justify-between cursor-pointer" data-target="disasterMode">
+                         <div>
+                             <p class="font-bold">Disaster Mode</p>
+                             <p class="text-sm">Emergency nutrition info is available.</p>
+                         </div>
+                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                     </div>
+                    <div class="mt-6 text-center">
+                        <p class="text-sm font-medium text-gray-600">Your Child's Health Score</p>
+                        <div class="relative inline-block my-2">
+                             <svg class="w-32 h-32" viewBox="0 0 36 36">
+                                 <path class="text-gray-200" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5"></path>
+                                 <path class="text-green-500" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5" stroke-dasharray="${appState.healthScore}, 100" stroke-dashoffset="-5" stroke-linecap="round"></path>
+                             </svg>
+                             <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                 <span class="text-3xl font-bold text-gray-800">${appState.healthScore}</span>
+                                 <span class="text-xs text-gray-500">Good</span>
+                             </div>
+                        </div>
+                        <p class="text-xs text-gray-500">Last updated: Today</p>
+                    </div>
+                     <h3 class="mt-6 font-bold text-lg text-gray-800">Key Actions</h3>
+                     <div class="grid grid-cols-2 gap-4 mt-2">
+                         <div class="bg-blue-100 p-4 rounded-2xl text-blue-800 cursor-pointer flex flex-col items-center justify-center text-center" data-target="symptomChecker"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p class="font-semibold text-sm">AI Symptom Checker</p></div>
+                         <div class="bg-green-100 p-4 rounded-2xl text-green-800 cursor-pointer flex flex-col items-center justify-center text-center" data-target="nutriScan"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg><p class="font-semibold text-sm">NutriScan</p></div>
+                         <div class="bg-indigo-100 p-4 rounded-2xl text-indigo-800 cursor-pointer flex flex-col items-center justify-center text-center" data-target="doctorList"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"></path></svg><p class="font-semibold text-sm">Consult a Doctor</p></div>
+                         <div class="bg-purple-100 p-4 rounded-2xl text-purple-800 cursor-pointer flex flex-col items-center justify-center text-center" data-target="orderTrackingLocker"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7l8-4 8 4m0 6l-8 4-8-4"></path></svg><p class="font-semibold text-sm">Locker Pickup</p></div>
+                         <div class="bg-sky-100 p-4 rounded-2xl text-sky-800 cursor-pointer flex flex-col items-center justify-center text-center" data-target="learn"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg><p class="font-semibold text-sm">Learn & Grow</p></div>
+                         <div class="bg-pink-100 p-4 rounded-2xl text-pink-800 cursor-pointer flex flex-col items-center justify-center text-center" data-target="impact"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg><p class="font-semibold text-sm">Community Impact</p></div>
+                     </div>
+                     <div class="flex justify-between items-center mt-6">
+                         <h3 class="font-bold text-lg text-gray-800">Community Buzz</h3>
+                         <button class="bg-blue-100 text-blue-700 font-semibold text-xs py-1 px-3 rounded-lg" data-target="newPost">New Post</button>
+                     </div>
+                     <div id="homePostsContainer" class="space-y-2 mt-2">
+                         <!-- Community posts injected here -->
+                     </div>
+                </div>`,
+            growthTracker: () => `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden">
+                    <h1 class="text-2xl font-bold text-gray-800">Growth Tracker</h1>
+                    <p class="text-gray-500">Monitoring your child's progress against WHO standards.</p>
+                    <div id="growthSavedAlert" class="hidden mt-4 bg-green-100 text-green-800 p-3 rounded-lg text-sm">New growth data saved successfully!</div>
+                    <div class="mt-4 bg-white p-4 rounded-2xl shadow-md">
+                        <div class="w-full h-48 rounded-lg flex items-center justify-center">
+                            <canvas id="growthChartCanvas"></canvas>
+                        </div>
+                        <div id="growthStatusResult" class="mt-4 text-center p-3 rounded-lg">
+                            <!-- Status will be injected here -->
+                        </div>
+                         <div id="growthAdvice" class="mt-2 text-center text-sm text-gray-600"></div>
+                        <div class="grid grid-cols-2 gap-4 mt-4 text-center">
+                            <div><p class="text-sm text-gray-500">Height</p><p class="font-bold text-xl" id="displayHeight">${appState.growthHistory.slice(-1)[0].height} cm</p></div>
+                            <div><p class="text-sm text-gray-500">Weight</p><p class="font-bold text-xl" id="displayWeight">${appState.growthHistory.slice(-1)[0].weight} kg</p></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-4 bg-white rounded-2xl shadow-md">
+                        <p class="font-bold text-center">Your child grew 0.8cm this month — great job maintaining good nutrition!</p>
+                    </div>
+                    <button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-6" data-target="addGrowthEntry">Add New Entry</button>
+                </div>`,
+            addGrowthEntry: () => {
+                const latest = appState.growthHistory.slice(-1)[0];
+                return `
+                <div class="p-6 pt-20">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <h1 class="text-2xl font-bold text-center">Add New Growth Entry</h1>
+                    <div class="mt-8 space-y-4">
+                        <div>
+                            <label class="font-medium text-gray-700">Gender</label>
+                            <div class="flex gap-4 mt-2">
+                                <label class="flex-1"><input type="radio" name="gender" value="Male" class="sr-only peer" ${appState.gender === 'Male' ? 'checked' : ''}><div class="p-3 bg-gray-100 rounded-lg text-center peer-checked:bg-blue-500 peer-checked:text-white">Male</div></label>
+                                <label class="flex-1"><input type="radio" name="gender" value="Female" class="sr-only peer"><div class="p-3 bg-gray-100 rounded-lg text-center peer-checked:bg-pink-500 peer-checked:text-white">Female</div></label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="font-medium text-gray-700">Height (cm)</label>
+                            <input id="heightInput" type="number" value="${latest.height}" class="w-full mt-1 bg-gray-100 border-gray-300 rounded-lg p-3">
+                        </div>
+                        <div>
+                            <label class="font-medium text-gray-700">Weight (kg)</label>
+                            <input id="weightInput" type="number" value="${latest.weight}" class="w-full mt-1 bg-gray-100 border-gray-300 rounded-lg p-3">
+                        </div>
+                    </div>
+                    <button id="saveGrowthBtn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-8">Save Entry</button>
+                </div>`;
+            },
+            profile: () => `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden">
+                    <h1 class="text-2xl font-bold text-center">Smart Health Identity</h1>
+                    <div class="mt-6 p-4 bg-white rounded-2xl shadow-md text-center">
+                        <div class="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden mx-auto">
+                             <span class="text-4xl font-bold text-gray-600">${appState.fullName.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <h2 class="font-bold text-xl mt-4">${appState.fullName}</h2>
+                        <div class="mt-2 cursor-pointer" data-target="rewards">
+                            <span class="font-bold text-lg text-yellow-500">${appState.points} Points</span> ✨
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center mt-4 text-sm">
+                            <div><p class="text-gray-500">Birthday</p><p class="font-semibold">${appState.dob}</p></div>
+                            <div><p class="text-gray-500">Gender</p><p class="font-semibold">${appState.gender}</p></div>
+                            <div><p class="text-gray-500">Blood Type</p><p class="font-semibold text-red-500">${appState.bloodType}</p></div>
+                        </div>
+                    </div>
+                     <div class="mt-4 p-4 bg-white rounded-2xl shadow-md">
+                         <h3 class="font-semibold mb-2">Health Details</h3>
+                         <div class="text-sm space-y-2">
+                              <p><strong class="text-gray-600 w-24 inline-block">Allergies:</strong> ${appState.allergies}</p>
+                              <p><strong class="text-gray-600 w-24 inline-block">Vaccinations:</strong> ${appState.vaccinations}</p>
+                              <p><strong class="text-gray-600 w-24 inline-block">History:</strong> ${appState.medicalHistory}</p>
+                         </div>
+                    </div>
+                     <div class="mt-4 p-4 bg-white rounded-2xl shadow-md text-center">
+                         <h3 class="font-semibold mb-2">Health History QR</h3>
+                         <p class="text-xs text-gray-500 mb-4">Scannable by registered hospitals for instant access.</p>
+                         <div id="qrCodeContainer" class="cursor-pointer group inline-block">
+                             <canvas id="qrCanvas" class="mx-auto"></canvas>
+                             <p class="text-xs text-blue-600 font-semibold mt-2 flex items-center justify-center gap-1 opacity-75 group-hover:opacity-100 transition">
+                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                 View Larger
+                             </p>
+                         </div>
+                    </div>
+                     <div class="mt-8 space-y-2">
+                         <button class="bg-white p-4 w-full rounded-lg flex justify-between items-center shadow-sm text-left" data-target="myBadges"><span>My Badges</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+                         <button class="bg-white p-4 w-full rounded-lg flex justify-between items-center shadow-sm text-left" data-target="rewards"><span>Rewards Program</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+                         <button class="bg-white p-4 w-full rounded-lg flex justify-between items-center shadow-sm text-left" data-target="settings"><span>Settings</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+                    </div>
+                    <div class="mt-4">
+                        <button id="viewConsultationsBtn" class="w-full font-semibold bg-gradient-to-r from-teal-400 to-blue-500 text-white py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transform hover:scale-105 transition-transform">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                            <span>View Past Consultations</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mt-4">
+                         <button class="w-full bg-gray-200 text-gray-800 font-bold py-3 rounded-xl">Export Data</button>
+                         <button class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl">Share with Doctor</button>
+                    </div>
+                </div>`,
+            learn: () => `
+                <div class="p-6 pt-20">
+                    <h1 class="text-2xl font-bold text-gray-800">Learn & Grow</h1>
+                    <p class="text-gray-500">Fun, informative, and story-driven content.</p>
+                     <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                         <p class="font-bold text-blue-800 text-sm">💡 Daily Health Tip</p>
+                         <p class="text-blue-700 mt-1 text-sm">Ensure your child gets at least 15 minutes of sunlight before 10 AM for a natural Vitamin D boost!</p>
+                     </div>
+                    <div id="articlesContainer" class="space-y-4 mt-6">
+                        ${articles.map(article => `
+                             <div class="bg-white p-4 rounded-xl shadow-md flex items-center gap-4 cursor-pointer" data-target="${article.target}">
+                                 <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl">${article.icon}</div>
+                                 <div class="flex-1">
+                                     <p class="font-bold">${article.title}</p>
+                                     <p class="text-xs text-gray-500 mt-1">${article.type} • ${article.readTime}</p>
+                                 </div>
+                                 <div class="flex items-center gap-2">
+                                     <button class="text-gray-400 hover:text-yellow-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg></button>
+                                     <button class="text-gray-400 hover:text-blue-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.368a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"></path></svg></button>
+                                 </div>
+                             </div>
+                        `).join('')}
+                    </div>
+                </div>`,
+            articleDetail: () => `
+                <div class="p-6 pt-20">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <div class="w-full h-48 bg-green-100 rounded-2xl flex items-center justify-center my-6 text-6xl">🌟</div>
+                    <h1 class="text-2xl font-bold">Success Story: Overcoming Stunting</h1>
+                    <p class="text-sm text-gray-500 mt-1">Story • 7 min read</p>
+                    <p class="mt-4 text-gray-700 leading-relaxed">This is the inspiring story of a family who, with the help of community health workers and better nutrition, successfully overcame the challenges of stunting...</p>
+                </div>`,
+            nutriScan: () => `
+                 <div class="p-6 pt-20">
+                      <div class="text-center">
+                          <h1 class="text-2xl font-bold">NutriScan</h1>
+                          <p class="text-gray-500 mt-1">Scan ingredients to find healthy recipes for your family.</p>
+                      </div>
+                      <div class="w-full h-48 bg-gray-800 text-white rounded-2xl flex items-center justify-center my-8 flex-col cursor-pointer" data-target="cameraView">
+                          <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                          <p class="mt-2 text-sm">Tap to Scan</p>
+                      </div>
+                      <button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-4" data-target="recipeList">
+                          Browse Recipes
+                      </button>
+                 </div>`,
+             cameraView: () => `
+                 <div class="relative h-full bg-gray-900 flex items-center justify-center">
+                     <button class="absolute top-6 left-4 text-white z-20 back-btn p-2 rounded-full hover:bg-white/20"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                     <div class="w-full max-w-sm h-1/2 bg-gray-800 rounded-lg relative overflow-hidden">
+                         <p class="text-white/50 text-center absolute inset-0 flex items-center justify-center">Camera Preview</p>
+                         <div class="scanning-line"></div>
+                     </div>
+                     <div class="absolute inset-x-0 bottom-10 flex justify-center">
+                         <button id="scanBtn" class="w-20 h-20 bg-white rounded-full border-4 border-gray-400"></button>
+                     </div>
+                 </div>`,
+            scanResult: () => {
+                const scannedItems = [
+                    { name: 'Carrot', icon: '🥕', color: 'orange', calories: 41, highlight: 'High in Vitamin A' },
+                    { name: 'Spinach', icon: '🥬', color: 'green', calories: 23, highlight: 'Rich in Iron' },
+                    { name: 'Chicken Breast', icon: '🍗', color: 'yellow', calories: 165, highlight: 'Excellent Protein' }
+                ];
+
+                return `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                   <h1 class="text-2xl font-bold text-center">Scanned Ingredients</h1>
+
+                   <div class="mt-6 space-y-3">
+                        ${scannedItems.map(item => `
+                            <div class="bg-white p-4 rounded-xl shadow-md flex items-center gap-4">
+                                <div class="w-16 h-16 bg-${item.color}-100 rounded-lg flex-shrink-0 flex items-center justify-center text-4xl">${item.icon}</div>
+                                <div class="flex-1">
+                                    <p class="font-bold">${item.name}</p>
+                                    <p class="text-sm text-gray-500 mt-1">${item.highlight}</p>
+                                </div>
+                                <p class="text-sm font-semibold text-gray-600">${item.calories} kcal</p>
+                            </div>
+                        `).join('')}
+                   </div>
+
+                   <div class="mt-6 p-4 bg-green-50 border border-green-200 rounded-xl">
+                       <p class="font-bold text-green-800 text-sm">💡 AI Recommendation</p>
+                       <p class="text-green-700 mt-1 text-sm">This combination provides a great balance of protein, vitamins, and minerals. Perfect for a stunting-prevention meal!</p>
+                   </div>
+
+                   <div class="grid grid-cols-2 gap-4 mt-6">
+                       <button class="w-full bg-gray-200 text-gray-800 font-bold py-3 rounded-xl" data-target="cameraView">Add/Rescan</button>
+                       <button class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl" data-target="recipeList">Find Recipes</button>
+                   </div>
+                </div>`;
+            },
+            recipeList: () => `
+                <div class="p-6 pt-20 overflow-y-auto scroll-hidden h-full">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold">Recipes</h1>
+                    <h2 class="text-lg font-bold mt-6 text-gray-800">Recommended For You</h2>
+                    <p class="text-gray-500 text-sm mb-3">Based on your profile and scan history.</p>
+                    <div class="bg-white p-4 rounded-xl shadow-md flex items-center gap-4 cursor-pointer" data-target="recipeDetails">
+                        <div class="w-20 h-20 bg-teal-100 rounded-lg flex-shrink-0 flex items-center justify-center text-4xl">🐟</div>
+                        <div class="flex-1">
+                            <p class="font-bold">Salmon and Broccoli Bites</p>
+                            <p class="text-sm text-gray-500 mt-1">Boosts brain development</p>
+                        </div>
+                    </div>
+                    <h2 class="text-lg font-bold mt-6 text-gray-800">Filter All Recipes</h2>
+                    <div class="flex gap-2 overflow-x-auto scroll-hidden mt-2 pb-2">
+                        <button class="recipe-filter-btn active flex-shrink-0 bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-full" data-filter="all">All</button>
+                        <button class="recipe-filter-btn flex-shrink-0 bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-full" data-filter="weight-gain">Weight Gain</button>
+                        <button class="recipe-filter-btn flex-shrink-0 bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-full" data-filter="immune-boost">Immune Boost</button>
+                        <button class="recipe-filter-btn flex-shrink-0 bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-full" data-filter="stunting-prevention">Stunting Prevention</button>
+                    </div>
+                    <div id="recipesContainer" class="space-y-4 mt-4">
+                        <!-- Recipes will be injected here -->
+                    </div>
+                </div>`,
+            recipeDetails: () => `
+                 <div class="relative h-full overflow-y-auto scroll-hidden">
+                      <div class="w-full h-64 bg-yellow-100 flex items-center justify-center text-6xl">🍲</div>
+                      <button class="absolute top-6 left-4 text-gray-800 back-btn bg-white/70 backdrop-blur-sm p-2 rounded-full hover:bg-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                      <div class="p-6 bg-white rounded-t-2xl -mt-5 relative">
+                          <h1 class="text-3xl font-bold mt-2">Chicken & Carrot Porridge</h1>
+                          <p class="text-gray-500 mt-2">A delicious and nutrient-packed meal perfect for supporting healthy growth.</p>
+                          <div class="mt-6 p-4 bg-gray-100 rounded-xl grid grid-cols-3 text-center">
+                              <div><p class="font-bold text-lg">180</p><p class="text-xs text-gray-500">Calories</p></div>
+                              <div><p class="font-bold text-lg">15g</p><p class="text-xs text-gray-500">Protein</p></div>
+                              <div><p class="font-bold text-lg">Vit A</p><p class="text-xs text-gray-500">Vitamins</p></div>
+                          </div>
+                          <div class="mt-6"><h3 class="font-bold text-lg">Ingredients</h3><ul class="list-disc list-inside mt-2 text-gray-700 space-y-1"><li>1/2 cup Rice</li><li>1 small Chicken Breast, minced</li><li>1 Carrot, grated</li><li>4 cups Water or Broth</li></ul></div>
+                          <div class="mt-6">
+                            <div class="flex justify-between items-center">
+                                <h3 class="font-bold text-lg">Instructions</h3>
+                                <button class="flex items-center gap-2 bg-red-100 text-red-700 font-semibold text-xs py-1 px-3 rounded-lg" data-target="videoPlayer">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"></path></svg>
+                                    Watch Video
+                                </button>
+                            </div>
+                              <ol class="list-decimal list-inside mt-2 text-gray-700 space-y-2"><li>Wash rice and add to a pot with water or broth.</li><li>Bring to a boil, then add minced chicken and grated carrot.</li><li>Reduce heat, cover, and simmer for 20-25 minutes until rice is soft and creamy.</li><li>Serve warm.</li></ol>
+                          </div>
+                      </div>
+                 </div>`,
+            videoPlayer: () => `
+                <div class="relative h-full bg-black flex flex-col justify-center">
+                    <button class="absolute top-6 left-4 text-white z-20 back-btn p-2 rounded-full hover:bg-white/20"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <div class="w-full aspect-video bg-gray-900 flex items-center justify-center text-white/50">
+                        <p>Recipe video would play here.</p>
+                    </div>
+                    <div class="p-4 text-white">
+                        <h2 class="text-xl font-bold">Chicken & Carrot Porridge</h2>
+                        <p class="text-sm text-white/70">Video tutorial</p>
+                    </div>
+                </div>`,
+            doctorList: () => `
+                <div class="p-6 pt-20">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold text-gray-800">Consult a Doctor</h1>
+                    <p class="text-gray-500 mt-1">Find a verified healthcare professional.</p>
+                    <div class="mt-4 relative">
+                        <input id="doctorSearchInput" type="text" placeholder="Search by name..." class="w-full bg-gray-100 border-none rounded-lg py-3 pl-10 pr-4">
+                        <svg class="absolute left-3 top-3.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                     <div class="flex gap-2 overflow-x-auto scroll-hidden mt-4 pb-2">
+                         <button class="doc-filter-btn active flex-shrink-0 bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-full" data-filter="all">All</button>
+                         <button class="doc-filter-btn flex-shrink-0 bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-full" data-filter="Pediatrician">Pediatrician</button>
+                         <button class="doc-filter-btn flex-shrink-0 bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-full" data-filter="Nutritionist">Nutritionist</button>
+                         <button class="doc-filter-btn flex-shrink-0 bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-full" data-filter="General Practitioner">General</button>
+                    </div>
+                    <div id="doctorListContainer" class="space-y-4 mt-6">
+                        <!-- Doctors will be injected here -->
+                    </div>
+                </div>`,
+            doctorProfile: () => `
+                 <div class="p-6 pt-20">
+                      <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                      <div class="text-center">
+                          <div class="w-32 h-32 text-6xl rounded-full mx-auto bg-blue-100 flex items-center justify-center">👩‍⚕️</div>
+                          <h1 class="text-2xl font-bold mt-4">Dr. Indah Sari</h1>
+                          <p class="text-gray-500">Pediatrician</p>
+                          <p class="text-green-500 font-semibold mt-1">Online</p>
+                      </div>
+                      <p class="text-sm text-center text-gray-600 mt-4 leading-relaxed">Specializes in child nutrition and developmental health with 10+ years of experience.</p>
+                      <div class="grid grid-cols-2 gap-4 mt-8">
+                          <button class="w-full bg-gray-200 text-gray-800 font-bold py-4 rounded-xl" data-target="consultationChat">Chat</button>
+                          <button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl" data-target="videoCall">Video Call</button>
+                      </div>
+                 </div>`,
+            consultationChat: () => `
+                <div class="flex flex-col h-full">
+                    <div class="p-4 pt-16 bg-white border-b shadow-sm">
+                        <button class="absolute top-6 right-4 text-gray-600 p-2 rounded-full hover:bg-gray-100" data-target="consultationSummary"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                        <div class="text-center">
+                            <p class="font-bold text-gray-800">Dr. Indah Sari</p>
+                            <p class="text-sm text-green-500">Online</p>
+                        </div>
+                    </div>
+                    <div id="chatLog" class="flex-1 p-6 overflow-y-auto space-y-4">
+                        <div class="flex justify-start mb-4"><div class="bg-gray-200 p-3 rounded-lg max-w-xs">Hello, how can I help you and your little one today?</div></div>
+                    </div>
+                    <div class="p-4 bg-white border-t flex items-center">
+                        <input id="chatInput" type="text" placeholder="Type your message..." class="flex-1 bg-gray-100 border-none rounded-full py-3 px-5">
+                        <button id="sendChatBtn" class="ml-3 p-3 bg-blue-600 text-white rounded-full"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 0010 16h.001a1 1 0 00.725-.317l5-1.428a1 1 0 001.17-1.409l-7-14z"></path></svg></button>
+                    </div>
+                </div>`,
+            videoCall: () => `
+                <div class="relative h-full bg-gray-900">
+                    <div class="absolute inset-0 flex items-center justify-center text-white/50 text-lg bg-gray-800">Your Camera</div>
+                    <div class="w-28 h-40 bg-gray-700 absolute top-20 right-6 rounded-lg border-2 border-white flex items-center justify-center text-white/50 text-center text-sm">Doctor's Camera</div>
+                    <div class="absolute inset-x-0 bottom-10 flex justify-center items-center gap-6">
+                        <button class="w-16 h-16 bg-gray-700/50 backdrop-blur-sm text-white rounded-full flex items-center justify-center"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg></button>
+                        <button class="w-20 h-20 bg-red-600 text-white rounded-full flex items-center justify-center" data-target="consultationSummary"><svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2 2m-2-2v2.5M20 12c.333-4.667-2.333-7-5-7s-5.333 2.333-5 7c.333 4.667 2.333 7 5 7s5.333-2.333 5-7z"></path></svg></button>
+                        <button class="w-16 h-16 bg-gray-700/50 backdrop-blur-sm text-white rounded-full flex items-center justify-center"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></button>
+                    </div>
+                </div>`,
+            consultationSummary: () => `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden">
+                    <h1 class="text-2xl font-bold text-center">Consultation Summary</h1>
+                    <div class="mt-6 p-4 bg-white rounded-2xl shadow-md">
+                        <div class="flex items-center border-b pb-4 mb-4">
+                            <div class="w-16 h-16 text-4xl rounded-full bg-blue-100 flex items-center justify-center mr-4">👩‍⚕️</div>
+                            <div>
+                                <p class="font-bold text-lg">Dr. Indah Sari</p>
+                                <p class="text-sm text-gray-500">Pediatrician</p>
+                            </div>
+                        </div>
+                        <div class="text-sm space-y-3">
+                             <p><strong class="text-gray-600 w-28 inline-block">Date:</strong> October 5, 2025</p>
+                             <p><strong class="text-gray-600 w-28 inline-block">Symptoms:</strong> Fever, fatigue, no appetite.</p>
+                             <p><strong class="text-gray-600 w-28 inline-block">Diagnosis:</strong> Possible common flu.</p>
+                             <div>
+                                 <strong class="text-gray-600 w-28 inline-block align-top">Advice:</strong> 
+                                 <span class="inline-block w-2/3">Ensure the child stays hydrated, gets plenty of rest, and monitor temperature. If fever persists for more than 3 days, please schedule a follow-up.</span>
+                             </div>
+                        </div>
+                         <div class="border-t pt-4 mt-4">
+                            <h3 class="font-semibold mb-2">Prescribed Medicines</h3>
+                            <div class="space-y-2 text-sm">
+                                <p>1. Paracetamol (120mg/5ml) - 1 bottle</p>
+                                <p>2. Amoxicillin (250mg) - 10 tablets</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-8" data-target="payment">Purchase Medicine</button>
+                </div>`,
+            payment: () => `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden">
+                     <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100">
+                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                     </button>
+                    <h1 class="text-2xl font-bold text-center">Payment</h1>
+                    <div class="mt-6 p-4 bg-white rounded-2xl shadow-md">
+                        <h3 class="font-semibold mb-2 border-b pb-2">Order Details</h3>
+                        <div class="space-y-2 mt-4 text-sm">
+                            <div class="flex justify-between"><p>Paracetamol (1 bottle)</p><p>Rp 35,000</p></div>
+                            <div class="flex justify-between"><p>Amoxicillin (10 tablets)</p><p>Rp 50,000</p></div>
+                            <div class="flex justify-between font-bold mt-4 pt-2 border-t"><p>Total</p><p>Rp 85,000</p></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <h3 class="font-semibold mb-3 text-lg">Select Payment Method</h3>
+                        <div class="space-y-3">
+                            <div class="payment-option border-2 border-blue-500 rounded-lg p-4 flex items-center" data-method="card">
+                                <input type="radio" name="paymentMethod" id="card" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500" checked>
+                                <label for="card" class="ml-3 block text-sm font-medium text-gray-700">Debit/Credit Card</label>
+                            </div>
+                            <div class="payment-option border rounded-lg p-4 flex items-center" data-method="qris">
+                                <input type="radio" name="paymentMethod" id="qris" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                                <label for="qris" class="ml-3 block text-sm font-medium text-gray-700">QRIS</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="card-details" class="mt-6 space-y-4">
+                        <input type="text" placeholder="Card Number" class="w-full bg-gray-100 border-gray-300 rounded-lg p-3">
+                        <div class="grid grid-cols-2 gap-4">
+                            <input type="text" placeholder="MM/YY" class="w-full bg-gray-100 border-gray-300 rounded-lg p-3">
+                            <input type="text" placeholder="CVC" class="w-full bg-gray-100 border-gray-300 rounded-lg p-3">
+                        </div>
+                    </div>
+
+                    <div id="qris-details" class="mt-6 text-center hidden">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Example" alt="QRIS Code" class="mx-auto rounded-lg shadow-md">
+                        <p class="text-sm text-gray-600 mt-2">Scan with your payment app</p>
+                    </div>
+
+                    <button class="w-full bg-green-600 text-white font-bold py-4 rounded-xl mt-8" data-target="droneDelivery">Confirm Payment</button>
+                </div>`,
+            droneDelivery: () => `
+                <div class="relative h-full">
+                    <div class="absolute top-0 left-0 w-full p-4 z-[1000] space-y-2 pt-16">
+                        <div id="deliveryStatus" class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg text-center">
+                            <p class="font-bold text-lg">🛫 Drone has taken off!</p>
+                            <p class="text-sm text-gray-600">On its way to the pharmacy.</p>
+                        </div>
+                    </div>
+                    <div id="droneMap"></div>
+                    <div class="absolute bottom-24 left-1/2 -translate-x-1/2 w-auto p-4 z-[1000]">
+                       <div class="bg-white/90 backdrop-blur-sm py-1 px-3 rounded-full shadow-lg text-center text-xs font-semibold flex items-center gap-2">
+                           <span>🚁</span>
+                           <span>Active Drone</span>
+                       </div>
+                    </div>
+                    <div class="absolute bottom-10 left-0 w-full p-4 z-[1000]">
+                         <button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hidden" id="deliveryDoneBtn" data-target="home">Done</button>
+                    </div>
+                </div>`,
+            myBadges: () => `
+                <div class="p-6 pt-20">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <h1 class="text-2xl font-bold text-center">My Badges</h1>
+                    <div class="grid grid-cols-3 gap-4 mt-6 text-center">
+                        ${appState.badges.map(badge => `
+                            <div class="text-center ${!badge.unlocked ? 'opacity-50' : ''}">
+                                <div class="w-24 h-24 bg-${badge.color}-200 rounded-full flex items-center justify-center text-5xl mx-auto shadow-inner">${badge.icon}</div>
+                                <p class="text-sm mt-2 font-medium">${badge.name}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`,
+            settings: () => `<div class="p-6 pt-20"><button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button><h1 class="text-2xl font-bold">Settings</h1><div class="mt-6"><label for="language" class="font-medium text-gray-700">Language</label><select id="language" class="w-full mt-1 bg-gray-100 border-gray-300 rounded-lg p-3"><option>English</option><option>Bahasa Indonesia</option></select></div></div>`,
+            disasterMode: () => `<div class="p-6 pt-20 bg-red-800 text-white h-full"><button class="absolute top-6 left-4 text-white back-btn p-2 rounded-full hover:bg-red-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button><h1 class="text-2xl font-bold text-center">Disaster Mode</h1><div class="text-center mt-4"><svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div><div class="mt-6"><h3 class="font-semibold text-lg">Emergency Nutrition Guide</h3><p class="text-sm opacity-90 mt-2">During floods, prioritize clean water. If possible, boil water for 1 minute. Rely on non-perishable items like canned fish and fortified biscuits.</p></div><div class="mt-6"><h3 class="font-semibold text-lg">Emergency Hotlines</h3><p class="text-sm opacity-90 mt-2">National Disaster: 112<br>Local Health Unit: 021-123-456</p></div></div>`,
+            symptomChecker: () => `<div class="p-6 pt-20"><button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button><h1 class="text-2xl font-bold text-center">AI Symptom Checker</h1><p class="text-center text-gray-500 mt-2">Describe the symptoms. This is not a substitute for professional medical advice.</p><div class="mt-6"><textarea class="w-full h-32 bg-gray-100 border-none rounded-lg p-4" placeholder="e.g., my child has a fever, is tired, and has no appetite..."></textarea></div><button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-4" data-target="symptomResult">Analyze Symptoms</button></div>`,
+            symptomResult: () => `<div class="p-6 pt-20"><button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button><h1 class="text-2xl font-bold text-center">Preliminary Analysis</h1><div class="mt-6 space-y-4"><div class="bg-yellow-100 p-4 rounded-xl"><h3 class="font-bold text-yellow-800">Possible Causes:</h3><ul class="list-disc list-inside text-sm text-yellow-700 mt-2"><li>Common flu or infection</li><li>Dehydration</li><li>Nutrient deficiency</li></ul></div><div class="bg-red-100 p-4 rounded-xl border-l-4 border-red-500"><h3 class="font-bold text-red-800">Red Flag Warning:</h3><p class="text-sm text-red-700 mt-1">High fever combined with lethargy can be serious. Please consult a doctor immediately.</p></div></div><button class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-8" data-target="doctorList">Consult a Doctor Now</button></div>`,
+            orderTrackingLocker: () => `<div class="p-6 pt-20"><button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button><h1 class="text-2xl font-bold text-center">Ready for Pickup</h1><div class="flex border-b mt-6"><button class="tab-btn flex-1 text-center p-4 border-b-2 active border-blue-600 text-blue-600 font-semibold" data-tab="qrCodeTab">QR Code</button><button class="tab-btn flex-1 text-center p-4 border-b-2 border-transparent text-gray-500" data-tab="pinCodeTab">PIN Code</button></div><div id="qrCodeTab" class="tab-content text-center py-8"><p class="text-gray-500 mt-2">Scan this code at the N.E.X.U.S Locker to retrieve your order.</p><div class="my-8"><svg class="w-56 h-56 mx-auto" viewBox="0 0 256 256"><path fill="#1f2937" d="M184,80H160V64a32,32,0,0,0-64,0V80H72a8,8,0,0,0-8,8v96a8,8,0,0,0,8,8h24v16a8,8,0,0,0,16,0V192h16v16a8,8,0,0,0,16,0V192h24a8,8,0,0,0,8-8V88A8,8,0,0,0,184,80ZM112,64a16,16,0,0,1,32,0V80H112Z"/></svg></div></div><div id="pinCodeTab" class="tab-content text-center py-8 hidden"><p class="text-gray-500 mt-2">Enter this code on the locker's keypad to retrieve your order.</p><p class="text-6xl font-bold tracking-widest my-16">11-23-58</p></div></div>`,
+            
+            // --- NEWLY ADDED SCREENS ---
+
+            stuntingHeatMap: () => `
+                <div class="relative h-full">
+                    <div id="map"></div>
+                    <div class="absolute top-0 left-0 w-full p-4 z-[1000] space-y-2 pt-16">
+                        <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg">
+                            <h1 class="font-bold text-lg text-gray-800">Stunting Heat Map</h1>
+                            <p class="text-sm text-gray-600">Visualize stunting prevalence and find nearby health facilities.</p>
+                        </div>
+                    </div>
+                    <div class="absolute bottom-0 left-0 w-full p-4 z-[1000]">
+                         <button id="findNearestBtn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg pulse-btn">Find Nearest Locker</button>
+                    </div>
+                </div>`,
+            
+            impact: () => `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden bg-gray-50">
+                    <h1 class="text-3xl font-bold text-center text-gray-800">Make an Impact</h1>
+                    <p class="text-center text-gray-500 mt-2">Your contribution can change a child's life.</p>
+                    
+                    <div class="mt-8 grid grid-cols-2 gap-4 text-center">
+                        <div class="bg-white p-4 rounded-2xl shadow-md border">
+                            <p class="text-3xl font-bold text-pink-600">1,500+</p>
+                            <p class="text-sm text-gray-600 mt-1">Children Supported</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl shadow-md border">
+                            <p class="text-3xl font-bold text-pink-600">25</p>
+                            <p class="text-sm text-gray-600 mt-1">Communities Reached</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+                        <h3 class="font-bold text-lg text-gray-800">Help Us Reach Our Goal</h3>
+                        <p class="text-gray-600 text-sm mt-2">Every donation helps us provide essential nutritional supplies and hygiene education to children in need.</p>
+                        <div class="mt-4 h-4 w-full bg-gray-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-pink-500 to-orange-400" style="width: 75%;"></div>
+                        </div>
+                         <div class="mt-6">
+                            <label for="donationAmount" class="block text-sm font-medium text-gray-700">Enter Donation Amount</label>
+                            <div class="mt-1 relative rounded-md shadow-sm">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-500 sm:text-sm">Rp</span>
+                                </div>
+                                <input type="number" name="donationAmount" id="donationAmount" class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-8 pr-12 sm:text-sm border-gray-300 rounded-md py-3" placeholder="50000">
+                            </div>
+                        </div>
+                        <button id="donateCustomBtn" class="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 rounded-xl mt-6">Donate Now</button>
+                    </div>
+
+                    <div class="mt-8">
+                        <h3 class="text-xl font-bold text-gray-800">Stories from the Field</h3>
+                        <div class="flex gap-4 overflow-x-auto scroll-hidden mt-4 pb-4 -mx-6 px-6">
+                            <!-- Story Card 1 -->
+                            <div class="flex-shrink-0 w-64 bg-white rounded-2xl shadow-md overflow-hidden">
+                                <img src="TOGETHERIMAGE.jpg" class="w-full h-32 object-cover" alt="A group of smiling women and men, some giving a thumbs up.">
+                                <div class="p-4">
+                                    <h4 class="font-bold">A Mother's Hope</h4>
+                                    <p class="text-sm text-gray-600 mt-1">"With the nutrition kits, my son is finally growing strong and healthy." - Ibu Sari</p>
+                                </div>
+                            </div>
+                            <!-- Story Card 2 -->
+                            <div class="flex-shrink-0 w-64 bg-white rounded-2xl shadow-md overflow-hidden">
+                                <img src="wash.jpg" class="w-full h-32 object-cover" alt="Children drinking clean water from a tap">
+                                <div class="p-4">
+                                    <h4 class="font-bold">Clean Water, Bright Future</h4>
+                                    <p class="text-sm text-gray-600 mt-1">Our new village filter means fewer sick days and more time for school.</p>
+                                </div>
+                            </div>
+                             <!-- Story Card 3 -->
+                            <div class="flex-shrink-0 w-64 bg-white rounded-2xl shadow-md overflow-hidden">
+                                <img src="volunteer.jpg" class="w-full h-32 object-cover" alt="Health volunteer measuring a child's arm">
+                                <div class="p-4">
+                                    <h4 class="font-bold">Empowering Volunteers</h4>
+                                    <p class="text-sm text-gray-600 mt-1">Local health volunteers are now equipped to screen for malnutrition.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`,
+            
+            customDonation: () => `
+                <div class="p-6 pt-20 h-full overflow-y-auto scroll-hidden">
+                     <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold text-center">Secure Payment</h1>
+                    <div class="mt-6 p-4 bg-white rounded-2xl shadow-md">
+                        <div class="flex justify-between font-bold mt-2 pt-2"><p>Donation Amount:</p><p id="displayDonationAmount">Rp 50,000</p></div>
+                    </div>
+
+                    <div class="mt-6 space-y-4">
+                        <h3 class="font-semibold text-lg">Card Details</h3>
+                        <input type="text" placeholder="Card Number" class="w-full bg-gray-100 border-gray-300 rounded-lg p-3" inputmode="numeric" pattern="[0-9\\s]{13,19}" autocomplete="cc-number" maxlength="19">
+                        <div class="grid grid-cols-2 gap-4">
+                            <input type="text" placeholder="MM / YY" class="w-full bg-gray-100 border-gray-300 rounded-lg p-3" inputmode="numeric">
+                            <input type="text" placeholder="CVC" class="w-full bg-gray-100 border-gray-300 rounded-lg p-3" inputmode="numeric" maxlength="3">
+                        </div>
+                    </div>
+
+                    <button class="w-full bg-green-600 text-white font-bold py-4 rounded-xl mt-8" data-target="donationSuccess">Confirm Donation</button>
+                </div>`,
+
+            donationSuccess: () => `
+                <div class="p-6 pt-20 h-full flex flex-col items-center justify-center text-center bg-gradient-to-br from-green-50 to-teal-100">
+                     <div class="w-32 h-32 bg-white rounded-full flex items-center justify-center shadow-lg">
+                        <svg class="w-20 h-20 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                     </div>
+                     <h1 class="text-2xl font-bold mt-6">Thank You for Your Donation!</h1>
+                     <p class="text-gray-600 mt-2">You've earned the 'Community Helper' badge!</p>
+                     <p class="text-6xl mt-4">🎗️</p>
+                     <button class="nav-btn w-full bg-green-600 text-white font-bold py-4 rounded-xl mt-8" data-target="home">Back to Home</button>
+                </div>`,
+
+            rewards: () => `
+                <div class="p-6 pt-20">
+                     <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold text-center">Rewards Program</h1>
+                     <p class="text-center text-gray-500 mt-2">Redeem your points for discounts and more.</p>
+                </div>`,
+
+            aiChatbot: () => `
+                <div class="flex flex-col h-full">
+                    <div class="p-4 pt-16 bg-white border-b shadow-sm">
+                        <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                        <div class="text-center">
+                            <p class="font-bold text-gray-800">NutriSense AI Assistant</p>
+                            <p class="text-sm text-green-500">Online</p>
+                        </div>
+                    </div>
+                    <div id="chatbotLog" class="flex-1 p-6 overflow-y-auto space-y-4">
+                        <div class="flex justify-start mb-4"><div class="bg-gray-200 p-3 rounded-lg max-w-xs">Hello! I'm your AI assistant. How can I help you today?</div></div>
+                    </div>
+                    <div class="p-4 bg-white border-t">
+                        <div class="flex gap-2 overflow-x-auto scroll-hidden mb-3">
+                            <button class="chatbot-suggestion flex-shrink-0 bg-gray-100 text-gray-700 text-sm font-semibold px-3 py-1.5 rounded-full">Check child's growth</button>
+                            <button class="chatbot-suggestion flex-shrink-0 bg-gray-100 text-gray-700 text-sm font-semibold px-3 py-1.5 rounded-full">Suggest a meal plan</button>
+                            <button class="chatbot-suggestion flex-shrink-0 bg-gray-100 text-gray-700 text-sm font-semibold px-3 py-1.5 rounded-full">Find a doctor</button>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="chatbotInput" type="text" placeholder="Ask me anything..." class="flex-1 bg-gray-100 border-none rounded-full py-3 px-5">
+                            <button id="sendChatbotBtn" class="ml-3 p-3 bg-blue-600 text-white rounded-full"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 0010 16h.001a1 1 0 00.725-.317l5-1.428a1 1 0 001.17-1.409l-7-14z"></path></svg></button>
+                        </div>
+                    </div>
+                </div>`,
+            
+            newPost: () => `
+                <div class="p-6 pt-20">
+                     <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold text-center">Create a New Post</h1>
+                    <div class="mt-6">
+                        <textarea id="postContent" class="w-full h-40 bg-gray-100 border-none rounded-lg p-4" placeholder="Share your thoughts or ask a question..."></textarea>
+                    </div>
+                    <button id="submitPostBtn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl mt-4">Post to Community</button>
+                </div>`,
+
+            miniGame: () => `
+                <div class="p-6 pt-20 h-full flex flex-col">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold text-center">Feed the Character!</h1>
+                    <p class="text-center text-gray-500">Tap the healthy foods to help them grow.</p>
+                    <div class="flex-grow flex flex-col items-center justify-center">
+                        <div id="game-character" class="text-8xl transition-transform duration-300" style="transform: scale(1);">😐</div>
+                        <p id="game-message" class="font-bold mt-4 h-6"></p>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="game-piece text-5xl text-center cursor-pointer p-4 bg-green-100 rounded-xl" data-healthy="true">🥦</div>
+                        <div class="game-piece text-5xl text-center cursor-pointer p-4 bg-red-100 rounded-xl" data-healthy="false">🍩</div>
+                        <div class="game-piece text-5xl text-center cursor-pointer p-4 bg-green-100 rounded-xl" data-healthy="true">🥕</div>
+                        <div class="game-piece text-5xl text-center cursor-pointer p-4 bg-red-100 rounded-xl" data-healthy="false">🍟</div>
+                        <div class="game-piece text-5xl text-center cursor-pointer p-4 bg-green-100 rounded-xl" data-healthy="true">🐟</div>
+                        <div class="game-piece text-5xl text-center cursor-pointer p-4 bg-red-100 rounded-xl" data-healthy="false">🍭</div>
+                    </div>
+                </div>`,
+            
+            foodGroupGame: () => `
+                <div class="p-6 pt-20 h-full flex flex-col">
+                    <button class="absolute top-6 left-4 text-gray-600 back-btn p-2 rounded-full hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                    <h1 class="text-2xl font-bold text-center">Sort the Foods</h1>
+                    <p class="text-center text-gray-500 text-sm">Drag each food to its correct group.</p>
+                    
+                    <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                        <div class="dropzone p-2 bg-blue-100 rounded-lg" data-group="protein">
+                            <p class="font-bold text-xs text-blue-800">Protein</p>
+                        </div>
+                        <div class="dropzone p-2 bg-orange-100 rounded-lg" data-group="carb">
+                             <p class="font-bold text-xs text-orange-800">Carbs</p>
+                        </div>
+                        <div class="dropzone p-2 bg-green-100 rounded-lg" data-group="veg">
+                             <p class="font-bold text-xs text-green-800">Veggies</p>
+                        </div>
+                    </div>
+
+                    <p id="food-game-message" class="text-center font-semibold mt-4 h-5"></p>
+
+                    <div id="food-items" class="mt-4 grid grid-cols-4 gap-4 items-center justify-center">
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="protein">🍗</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="veg">🥦</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="carb">🥖</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="protein">🥚</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="carb">🍚</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="veg">🥕</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="protein">🐟</div>
+                        <div class="food-item text-4xl text-center cursor-grab p-2" draggable="true" data-group="veg">🥬</div>
+                    </div>
+                    <button id="resetFoodGame" class="w-full bg-gray-200 text-gray-800 font-bold py-3 rounded-xl mt-auto">Reset</button>
+                </div>`,
+        };
+
+        const navItems = [
+            { id: 'home', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>', label: 'Home'},
+            { id: 'growthTracker', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>', label: 'Growth'},
+            { id: 'stuntingHeatMap', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>', label: 'Map'},
+            { id: 'impact', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>', label: 'Impact'},
+            { id: 'profile', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />', label: 'Profile'}
+        ];
+        
+        // --- CORE APP LOGIC ---
+
+        function renderScreen(screenId) {
+            const screenFunction = screens[screenId] || screens['home'];
+            const screenDiv = document.createElement('div');
+            screenDiv.id = screenId;
+            screenDiv.classList.add('figma-screen', 'scroll-hidden');
+            screenDiv.innerHTML = screenFunction();
+            appView.appendChild(screenDiv);
+            
+            requestAnimationFrame(() => {
+                screenDiv.classList.add('active');
+                const setupFunction = `setup_${screenId}`;
+                if (window[setupFunction]) {
+                    window[setupFunction]();
+                }
+            });
+        }
+
+        function navigateTo(screenId, isBack = false) {
+            const currentActiveScreen = appView.querySelector('.figma-screen.active');
+            
+            if (currentActiveScreen && currentActiveScreen.id === screenId) return;
+
+            const existingScreen = document.getElementById(screenId);
+            const chatbotFab = document.getElementById('chatbotFab');
+
+            if (chatbotFab) {
+                chatbotFab.style.display = (screenId === 'aiChatbot' || screenId === 'login' || screenId === 'pinLogin' || screenId === 'greeting') ? 'none' : 'block';
+            }
+
+            if (currentActiveScreen) {
+                currentActiveScreen.classList.remove('active');
+                if (isBack) {
+                     setTimeout(() => currentActiveScreen.remove(), 400);
+                } else {
+                     currentActiveScreen.classList.add('inactive-left');
+                }
+            }
+            
+            if (existingScreen) {
+                 existingScreen.classList.remove('inactive-left');
+                 existingScreen.classList.add('active');
+                 const setupFunction = `setup_${screenId}`;
+                 if (window[setupFunction]) window[setupFunction]();
+            } else {
+                 renderScreen(screenId);
+            }
+
+            if (!isBack) {
+                 if (screenHistory[screenHistory.length - 1] !== screenId) {
+                     screenHistory.push(screenId);
+                 }
+            }
+
+            updateNav(screenId);
+        }
+
+        function goBack() {
+            if (screenHistory.length > 1) {
+                const currentScreenId = screenHistory.pop();
+                const previousScreenId = screenHistory[screenHistory.length - 1];
+
+                const currentScreen = document.getElementById(currentScreenId);
+                const previousScreen = document.getElementById(previousScreenId);
+                
+                if (currentScreen) {
+                    currentScreen.classList.remove('active'); 
+                    setTimeout(() => currentScreen.remove(), 400);
+                }
+
+                if (previousScreen) {
+                    previousScreen.classList.remove('inactive-left');
+                    previousScreen.classList.add('active');
+                    updateNav(previousScreenId);
+                    const setupFunction = `setup_${previousScreenId}`;
+                    if (window[setupFunction]) window[setupFunction]();
+                } else {
+                    navigateTo(previousScreenId, true);
+                }
+
+                const chatbotFab = document.getElementById('chatbotFab');
+                if (chatbotFab) {
+                    chatbotFab.style.display = (previousScreenId === 'aiChatbot' || previousScreenId === 'login' || previousScreenId === 'pinLogin' || previousScreenId === 'greeting') ? 'none' : 'block';
+                }
+            }
+        }
+        
+        function updateNav(screenId) {
+            const navContainer = chromeUI.querySelector('.bottom-nav');
+            if (!navContainer) return;
+            const targetNavItem = navItems.find(item => item.id === screenId);
+            navContainer.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            if (targetNavItem) {
+                const activeBtn = navContainer.querySelector(`[data-target="${screenId}"]`);
+                if (activeBtn) activeBtn.classList.add('active');
+            }
+        }
+
+        function buildChrome() {
+            const navContainer = chromeUI.querySelector('.bottom-nav');
+            navContainer.innerHTML = navItems.map(item => `
+                <button class="nav-btn text-center text-gray-500 flex-1 py-2" data-target="${item.id}">
+                    <svg class="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">${item.icon}</svg>
+                    <p class="text-xs mt-1">${item.label}</p>
+                </button>
+            `).join('');
+            
+            updateTime();
+            setInterval(updateTime, 1000);
+        }
+
+        function updateTime() {
+            const timeEl = document.getElementById('currentTime');
+            if(timeEl) {
+                timeEl.textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit'});
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        appView.addEventListener('click', handleAppClicks);
+        chromeUI.addEventListener('click', handleAppClicks);
+
+        function handleAppClicks(e) {
+            const targetButton = e.target.closest('[data-target]');
+            const backButton = e.target.closest('.back-btn');
+            
+            if (targetButton) {
+                e.stopPropagation();
+                const targetId = targetButton.dataset.target;
+                
+                // Special handling for finishing a consultation
+                if (targetId === 'consultationSummary') {
+                    const currentScreenId = screenHistory[screenHistory.length - 1];
+                    if (currentScreenId === 'consultationChat' || currentScreenId === 'videoCall') {
+                        screenHistory.pop(); // Remove the chat/video screen from history
+                    }
+                }
+
+                if (targetButton.classList.contains('nav-btn')) {
+                    appView.querySelectorAll('.figma-screen').forEach(screen => {
+                        const isNavScreen = navItems.some(item => item.id === screen.id);
+                        if (!isNavScreen && screen.id !== targetId) {
+                             screen.remove();
+                        }
+                    });
+                     screenHistory = [targetId]; // FIX: Reset history correctly for nav items
+                }
+                navigateTo(targetId);
+            } else if (backButton) {
+                e.stopPropagation();
+                goBack();
+            }
+        }
+
+
+        // --- SCREEN-SPECIFIC SETUP FUNCTIONS ---
+        window.setup_login = function() {
+            const container = document.getElementById('fingerprint-container-new');
+            const statusEl = document.getElementById('fingerprint-status');
+            
+            container.addEventListener('click', () => {
+                if (container.classList.contains('scanning') || container.classList.contains('success')) return;
+
+                statusEl.textContent = "Scanning...";
+                container.classList.add('scanning');
+                
+                setTimeout(() => {
+                    container.classList.remove('scanning');
+                    container.classList.add('success');
+                    statusEl.textContent = "Success!";
+                    statusEl.classList.add('text-green-400', 'font-bold');
+                    setTimeout(() => navigateTo('greeting'), 1000);
+                }, 2000);
+            });
+        }
+        
+        window.setup_pinLogin = function() {
+            const pinDotsContainer = document.getElementById('pin-dots');
+            const pinDots = pinDotsContainer.querySelectorAll('.pin-dot');
+            const pinBtns = document.querySelectorAll('.pin-btn');
+            let pin = '';
+
+            const updateDots = () => {
+                pinDots.forEach((dot, index) => {
+                    dot.style.backgroundColor = index < pin.length ? '#3b82f6' : '#d1d5db';
+                });
+            };
+
+            const handleLogin = () => {
+                if (pin === '1234') { // Correct PIN
+                    navigateTo('greeting');
+                } else {
+                    pinDotsContainer.classList.add('shake');
+                    setTimeout(() => {
+                        pin = '';
+                        updateDots();
+                        pinDotsContainer.classList.remove('shake');
+                    }, 820);
+                }
+            };
+            
+            pinBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.dataset.key;
+                    if (key === 'del') {
+                        pin = pin.slice(0, -1);
+                    } else if (pin.length < 4) {
+                        pin += key;
+                    }
+                    updateDots();
+
+                    if (pin.length === 4) {
+                        setTimeout(handleLogin, 200);
+                    }
+                });
+            });
+        };
+
+        window.setup_greeting = function() {
+            const greetingText = document.getElementById('greetingText');
+            
+            setTimeout(() => {
+                greetingText.classList.remove('opacity-0', 'scale-90');
+            }, 100);
+
+            setTimeout(() => {
+                chromeUI.classList.remove('hidden');
+                buildChrome();
+                navigateTo('home');
+                screenHistory = ['home'];
+            }, 2500);
+        };
+        
+        window.setup_home = function() {
+             const postsContainer = document.getElementById('homePostsContainer');
+             if(postsContainer) {
+                 postsContainer.innerHTML = appState.communityPosts.slice(0, 2).map(post => `
+                     <div class="bg-white p-4 rounded-xl shadow-md mt-2">
+                         <div class="flex items-start gap-3">
+                             <div class="w-10 h-10 rounded-full bg-${post.color}-200 flex items-center justify-center font-bold text-${post.color}-700">${post.avatar}</div>
+                             <div>
+                                 <p class="font-semibold text-sm capitalize">${post.author}</p>
+                                 <p class="text-xs text-gray-400">${post.time}</p>
+                             </div>
+                         </div>
+                         <p class="mt-3 text-gray-700 text-sm">${post.content}</p>
+                     </div>
+                 `).join('');
+             }
+             const notificationBell = document.getElementById('notificationBell');
+             if (notificationBell) {
+                if (appState.notifications.some(n => !n.read)) {
+                    notificationBell.classList.add('new');
+                }
+                notificationBell.addEventListener('click', openNotificationPanel);
+             }
+        }
+        
+        window.setup_impact = function() {
+            const donateBtn = document.getElementById('donateCustomBtn');
+            const amountInput = document.getElementById('donationAmount');
+            if (donateBtn) {
+                donateBtn.addEventListener('click', () => {
+                    const amount = amountInput.value || '50000'; // Default amount
+                    appState.currentDonationAmount = parseInt(amount);
+                    navigateTo('customDonation');
+                });
+            }
+        }
+
+        window.setup_customDonation = function() {
+            const amountDisplay = document.getElementById('displayDonationAmount');
+            if (amountDisplay && appState.currentDonationAmount) {
+                amountDisplay.textContent = 'Rp ' + appState.currentDonationAmount.toLocaleString('id-ID');
+            }
+        }
+
+        window.setup_cameraView = function() {
+            document.getElementById('scanBtn').addEventListener('click', () => {
+                navigateTo('scanResult');
+            });
+        };
+
+        window.setup_consultationChat = function() {
+            const chatLog = document.getElementById('chatLog');
+            const chatInput = document.getElementById('chatInput');
+            const sendBtn = document.getElementById('sendChatBtn');
+
+            const sendMsg = () => {
+                const msg = chatInput.value.trim();
+                if (msg) {
+                    chatLog.innerHTML += `<div class="flex justify-end mb-4"><div class="bg-blue-600 text-white p-3 rounded-lg max-w-xs">${msg}</div></div>`;
+                    chatInput.value = '';
+                    chatLog.scrollTop = chatLog.scrollHeight;
+                }
+            };
+
+            sendBtn.addEventListener('click', sendMsg);
+            chatInput.addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') sendMsg();
+            });
+        }
+        
+        window.setup_aiChatbot = function() {
+            const chatLog = document.getElementById('chatbotLog');
+            const chatInput = document.getElementById('chatbotInput');
+            const sendBtn = document.getElementById('sendChatbotBtn');
+            const suggestions = document.querySelectorAll('.chatbot-suggestion');
+
+            const sendMessage = (text) => {
+                 if (text) {
+                      chatLog.innerHTML += `<div class="flex justify-end mb-4"><div class="bg-blue-600 text-white p-3 rounded-lg max-w-xs">${text}</div></div>`;
+                      chatLog.scrollTop = chatLog.scrollHeight;
+                      setTimeout(() => respondTo(text), 1000);
+                 }
+            }
+
+            const respondTo = (text) => {
+                let response = "I'm not sure how to answer that. Can I help with something else?";
+                if (text.toLowerCase().includes("growth")) {
+                    response = "Based on your latest entry, your child's growth is in the 'Normal' range. Keep up the great work with balanced meals!";
+                } else if (text.toLowerCase().includes("meal plan")) {
+                    response = "Certainly! A good meal plan for a child Ananda's age could include fish for protein, spinach for iron, and sweet potatoes for Vitamin A. Would you like to see some recipes?";
+                } else if (text.toLowerCase().includes("doctor")) {
+                    response = "I can help with that. Navigating you to the doctor consultation page now.";
+                    setTimeout(() => navigateTo('doctorList'), 1500);
+                }
+                 chatLog.innerHTML += `<div class="flex justify-start mb-4"><div class="bg-gray-200 p-3 rounded-lg max-w-xs">${response}</div></div>`;
+                 chatLog.scrollTop = chatLog.scrollHeight;
+            }
+
+            sendBtn.addEventListener('click', () => {
+                sendMessage(chatInput.value);
+                chatInput.value = '';
+            });
+
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage(chatInput.value);
+                    chatInput.value = '';
+                }
+            });
+            
+            suggestions.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    sendMessage(btn.textContent);
+                });
+            });
+        }
+        
+        window.setup_miniGame = function() {
+            const character = document.getElementById('game-character');
+            const message = document.getElementById('game-message');
+            const pieces = document.querySelectorAll('.game-piece');
+            let scale = 1;
+
+            pieces.forEach(piece => {
+                piece.addEventListener('click', () => {
+                    const isHealthy = piece.dataset.healthy === 'true';
+                    if (isHealthy) {
+                        scale += 0.1;
+                        character.textContent = '😄';
+                        character.style.transform = `scale(${scale})`;
+                        message.textContent = 'Yum! That was healthy!';
+                        message.style.color = '#16a34a';
+                    } else {
+                        scale = Math.max(1, scale - 0.1);
+                        character.textContent = '🤢';
+                        character.style.transform = `scale(${scale})`;
+                        message.textContent = 'Oh no! That\'s not very healthy.';
+                        message.style.color = '#dc2626';
+                    }
+                    setTimeout(() => { character.textContent = '😐'; message.textContent = ''; }, 1500);
+                });
+            });
+        };
+
+        window.setup_foodGroupGame = function() {
+            const gameScreen = document.getElementById('foodGroupGame');
+            if (!gameScreen || gameScreen.dataset.initialized) return;
+            gameScreen.dataset.initialized = 'true';
+
+            const foodItems = Array.from(gameScreen.querySelectorAll('.food-item'));
+            const dropzones = gameScreen.querySelectorAll('.dropzone');
+            const messageEl = gameScreen.querySelector('#food-game-message');
+            const foodContainer = gameScreen.querySelector('#food-items');
+            const resetBtn = gameScreen.querySelector('#resetFoodGame');
+            let draggedItem = null;
+
+            function addDragListeners(item) {
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+            }
+            
+            function handleDragStart(e) {
+                draggedItem = e.target;
+                setTimeout(() => e.target.style.opacity = '0.5', 0);
+            }
+            
+            function handleDragEnd(e) {
+                setTimeout(() => {
+                    e.target.style.opacity = '1';
+                    draggedItem = null;
+                }, 50);
+            }
+
+            foodItems.forEach(addDragListeners);
+
+            dropzones.forEach(zone => {
+                zone.addEventListener('dragover', handleDragOver);
+                zone.addEventListener('dragleave', handleDragLeave);
+                zone.addEventListener('drop', handleDrop);
+            });
+            
+            function handleDragOver(e) {
+                e.preventDefault();
+                this.classList.add('bg-green-200');
+            }
+            
+            function handleDragLeave() {
+                this.classList.remove('bg-green-200');
+            }
+
+            function handleDrop(e) {
+                e.preventDefault();
+                this.classList.remove('bg-green-200');
+                if (draggedItem) {
+                    const itemGroup = draggedItem.dataset.group;
+                    const zoneGroup = this.dataset.group;
+
+                    if (itemGroup === zoneGroup) {
+                        this.appendChild(draggedItem);
+                        draggedItem.draggable = false;
+                        draggedItem.classList.remove('cursor-grab');
+                        draggedItem.classList.add('cursor-not-allowed');
+                        
+                        messageEl.textContent = 'Correct!';
+                        messageEl.style.color = '#16a34a';
+
+                        if (foodContainer.children.length === 0) {
+                            messageEl.textContent = 'You got them all! Great job!';
+                        }
+                    } else {
+                        messageEl.textContent = 'Oops, wrong food group!';
+                        messageEl.style.color = '#dc2626';
+                    }
+                    setTimeout(() => messageEl.textContent = '', 2000);
+                }
+            }
+            
+            resetBtn.addEventListener('click', () => {
+                 foodItems.forEach(item => {
+                    foodContainer.appendChild(item);
+                    item.draggable = true;
+                    item.classList.add('cursor-grab');
+                    item.classList.remove('cursor-not-allowed');
+                });
+                messageEl.textContent = '';
+            });
+        };
+
+        window.setup_newPost = function() {
+            document.getElementById('submitPostBtn').addEventListener('click', () => {
+                const content = document.getElementById('postContent').value.trim();
+                if (content) {
+                    appState.communityPosts.unshift({
+                        author: appState.fullName,
+                        time: "Just now",
+                        avatar: appState.fullName.charAt(0).toUpperCase(),
+                        color: "blue",
+                        content: content,
+                        replies: 0,
+                        likes: 0
+                    });
+                    navigateTo('home');
+                }
+            });
+        }
+
+        window.setup_growthTracker = function() {
+            const ctx = document.getElementById('growthChartCanvas');
+            if (!ctx) return;
+
+            if (growthChartInstance) {
+                growthChartInstance.destroy();
+            }
+
+            const labels = appState.growthHistory.map(entry => new Date(entry.date).toLocaleDateString('en-GB', {month:'short'}));
+            const heightData = appState.growthHistory.map(entry => entry.height);
+            const weightData = appState.growthHistory.map(entry => entry.weight);
+
+            growthChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Height (cm)', data: heightData, borderColor: 'rgb(59, 130, 246)', tension: 0.1, yAxisID: 'y' },
+                        { label: 'Weight (kg)', data: weightData, borderColor: 'rgb(22, 163, 74)', tension: 0.1, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { position: 'left', title: { display: true, text: 'cm' } },
+                        y1: { position: 'right', title: { display: true, text: 'kg' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+
+            const latestEntry = appState.growthHistory.slice(-1)[0];
+            const dob = new Date(appState.dob);
+            const now = new Date();
+            const ageInMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+            
+            const status = assessGrowth(ageInMonths, appState.gender, latestEntry.height, latestEntry.weight);
+            const statusEl = document.getElementById('growthStatusResult');
+            const adviceEl = document.getElementById('growthAdvice');
+            statusEl.innerHTML = `<p class="font-bold text-lg">${status.message}</p>`;
+            statusEl.className = `mt-4 text-center p-3 rounded-lg ${status.color}`;
+            adviceEl.textContent = status.advice;
+        }
+        
+        window.setup_addGrowthEntry = function() {
+            document.getElementById('saveGrowthBtn').addEventListener('click', () => {
+                const height = document.getElementById('heightInput').value;
+                const weight = document.getElementById('weightInput').value;
+                const gender = document.querySelector('input[name="gender"]:checked').value;
+                
+                if (height && weight) {
+                    appState.growthHistory.push({ date: new Date().toISOString().split('T')[0], height: parseFloat(height), weight: parseFloat(weight) });
+                    appState.gender = gender;
+                    
+                    goBack();
+                    
+                    setTimeout(() => {
+                        const alert = document.getElementById('growthSavedAlert');
+                        if (alert) {
+                            alert.classList.remove('hidden');
+                            setTimeout(() => alert.classList.add('hidden'), 3000);
+                        }
+                        const growthScreen = document.getElementById('growthTracker');
+                        if (growthScreen) {
+                            growthScreen.innerHTML = screens.growthTracker();
+                            setup_growthTracker();
+                        }
+                    }, 500);
+                }
+            });
+        }
+        
+        window.setup_profile = function() {
+            const qrCanvas = document.getElementById('qrCanvas');
+            const qrData = JSON.stringify({
+                name: appState.fullName,
+                dob: appState.dob,
+                bloodType: appState.bloodType,
+                vaccinations: appState.vaccinations,
+                allergies: appState.allergies,
+                medicalHistory: appState.medicalHistory,
+                growthHistory: appState.growthHistory
+            });
+        
+            if (qrCanvas && typeof QRious !== 'undefined') {
+                new QRious({
+                    element: qrCanvas,
+                    value: qrData,
+                    size: 160,
+                    padding: 10,
+                    foreground: '#1f2937'
+                });
+            }
+        
+            // --- QR Modal Logic ---
+            const qrContainer = document.getElementById('qrCodeContainer');
+            const qrModal = document.getElementById('qrModal');
+            const largeQrCanvas = document.getElementById('largeQrCanvas');
+        
+            if (qrContainer && qrModal && largeQrCanvas) {
+                qrContainer.addEventListener('click', () => {
+                    new QRious({
+                        element: largeQrCanvas,
+                        value: qrData,
+                        size: 280, 
+                        padding: 15,
+                        foreground: '#1f2937'
+                    });
+                    qrModal.classList.remove('hidden');
+                });
+            }
+
+            // --- Consultation History Logic ---
+            const viewBtn = document.getElementById('viewConsultationsBtn');
+            const consultationModal = document.querySelector('#consultationModal');
+            const consultationPanel = document.querySelector('#consultationPanel');
+            const consultationList = document.querySelector('#consultationList');
+            const closeBtn = document.querySelector('#closeConsultationBtn');
+
+            if (viewBtn) {
+                viewBtn.addEventListener('click', () => {
+                    // Populate list
+                    if(appState.consultationHistory && appState.consultationHistory.length > 0) {
+                        consultationList.innerHTML = appState.consultationHistory.map(consult => `
+                            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <p class="font-bold text-gray-800">🧑‍⚕️ ${consult.doctor}</p>
+                                        <p class="text-sm text-gray-500">${consult.hospital}</p>
+                                    </div>
+                                    <p class="text-xs text-gray-500 font-medium">${consult.date}</p>
+                                </div>
+                                <div class="mt-3 border-t pt-3">
+                                    <p class="text-sm text-gray-700"><strong class="font-semibold">Summary:</strong> ${consult.summary}</p>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        consultationList.innerHTML = `<p class="text-center text-gray-500 py-8">No past consultations found.</p>`;
+                    }
+
+
+                    // Show modal
+                    consultationModal.classList.remove('hidden');
+                    requestAnimationFrame(() => {
+                        consultationPanel.classList.remove('translate-y-full');
+                    });
+                });
+            }
+
+            if (closeBtn) {
+                const closeModal = () => {
+                    consultationPanel.classList.add('translate-y-full');
+                    setTimeout(() => {
+                        consultationModal.classList.add('hidden');
+                    }, 300); // Match transition duration
+                };
+                closeBtn.addEventListener('click', closeModal);
+                consultationModal.addEventListener('click', (e) => {
+                    if (e.target === consultationModal) {
+                        closeModal();
+                    }
+                });
+            }
+        }
+
+        window.setup_donationSuccess = function() {
+            const badge = appState.badges.find(b => b.name === 'Community Helper');
+            if (badge) {
+                badge.unlocked = true;
+            }
+        }
+
+        window.setup_recipeList = function() {
+            const container = document.getElementById('recipesContainer');
+            const filterButtons = document.querySelectorAll('.recipe-filter-btn');
+
+            function renderRecipes(filter = 'all') {
+                const filteredRecipes = (filter === 'all') ? recipes : recipes.filter(r => r.category === filter);
+                container.innerHTML = filteredRecipes.map(recipe => `
+                    <div class="bg-white p-4 rounded-xl shadow-md flex items-center gap-4 cursor-pointer" data-target="recipeDetails">
+                        <div class="w-20 h-20 bg-${recipe.color}-100 rounded-lg flex-shrink-0 flex items-center justify-center text-4xl">${recipe.image}</div>
+                        <div class="flex-1">
+                            <p class="font-bold">${recipe.name}</p>
+                            <p class="text-sm text-gray-500 mt-1">${recipe.description}</p>
+                            <div class="flex items-center gap-4 text-xs mt-1">
+                                <span class="text-blue-600 font-semibold">~${recipe.calories} kcal</span>
+                                <span class="text-green-600 font-semibold">${recipe.affordability}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            filterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    filterButtons.forEach(btn => {
+                        btn.classList.remove('active', 'bg-blue-500', 'text-white');
+                        btn.classList.add('bg-gray-200', 'text-gray-700');
+                    });
+                    button.classList.add('active', 'bg-blue-500', 'text-white');
+                    button.classList.remove('bg-gray-200', 'text-gray-700');
+                    renderRecipes(button.dataset.filter);
+                });
+            });
+
+            renderRecipes(); // Initial render
+        }
+
+        window.setup_doctorList = function() {
+            const container = document.getElementById('doctorListContainer');
+            const searchInput = document.getElementById('doctorSearchInput');
+            const filterButtons = document.querySelectorAll('.doc-filter-btn');
+            let currentFilter = 'all';
+
+            function renderDoctors() {
+                const query = searchInput.value.toLowerCase();
+                const filteredDoctors = doctors.filter(doc => {
+                    const nameMatch = doc.name.toLowerCase().includes(query);
+                    const filterMatch = currentFilter === 'all' || doc.specialty === currentFilter;
+                    return nameMatch && filterMatch;
+                });
+
+                if (filteredDoctors.length === 0) {
+                     container.innerHTML = `<p class="text-center text-gray-500">No doctors found.</p>`;
+                     return;
+                }
+
+                container.innerHTML = filteredDoctors.map(doc => `
+                    <div class="bg-white p-4 rounded-2xl shadow-md flex items-center cursor-pointer" data-target="doctorProfile">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full mr-4 flex items-center justify-center text-3xl">${doc.avatar}</div>
+                        <div class="flex-1">
+                            <p class="font-bold text-gray-800">${doc.name}</p>
+                            <p class="text-sm text-gray-500">${doc.specialty}</p>
+                        </div>
+                         <div class="text-right">
+                             <p class="text-xs font-semibold ${doc.status === 'Online' ? 'text-green-500' : 'text-gray-400'}">${doc.status}</p>
+                         </div>
+                    </div>
+                `).join('');
+            }
+            
+            searchInput.addEventListener('input', renderDoctors);
+
+            filterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    filterButtons.forEach(btn => {
+                        btn.classList.remove('active', 'bg-blue-500', 'text-white');
+                        btn.classList.add('bg-gray-200', 'text-gray-700');
+                    });
+                    button.classList.add('active', 'bg-blue-500', 'text-white');
+                    button.classList.remove('bg-gray-200', 'text-gray-700');
+                    currentFilter = button.dataset.filter;
+                    renderDoctors();
+                });
+            });
+            
+            renderDoctors(); // Initial render
+        }
+        
+        window.setup_stuntingHeatMap = function() {
+            if (document.getElementById('map') && typeof L !== 'undefined') {
+                if(map) {
+                    try { map.remove(); } catch(e) { console.error("Could not remove map:", e); }
+                }
+                
+                const userLocation = [-6.2244, 106.7990];
+
+                map = L.map('map', { zoomControl: false }).setView(userLocation, 12); // Zoom out a bit
+                
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                }).addTo(map);
+
+                // --- Stunting Area Data ---
+                const stuntingAreas = [
+                    // High risk (red)
+                    {lat: -6.2, lng: 106.84, severity: 'high', radius: 1200},
+                    {lat: -6.16, lng: 106.89, severity: 'high', radius: 1000},
+                    {lat: -6.28, lng: 106.78, severity: 'high', radius: 800},
+                    // Medium risk (yellow)
+                    {lat: -6.18, lng: 106.78, severity: 'medium', radius: 1500},
+                    {lat: -6.26, lng: 106.85, severity: 'medium', radius: 1800},
+                    {lat: -6.14, lng: 106.82, severity: 'medium', radius: 1300},
+                ];
+
+                stuntingAreas.forEach(area => {
+                    L.circle([area.lat, area.lng], {
+                        radius: area.radius,
+                        fillColor: area.severity === 'high' ? "#ef4444" : "#f59e0b",
+                        color: area.severity === 'high' ? "#ef4444" : "#f59e0b",
+                        weight: 1,
+                        opacity: 0.5,
+                        fillOpacity: 0.2
+                    }).addTo(map);
+                });
+
+                // --- Legend Control ---
+                const legend = L.control({position: 'bottomright'});
+                legend.onAdd = function (map) {
+                    const div = L.DomUtil.create('div', 'info legend');
+                    div.innerHTML = 
+                        '<h4 class="font-bold text-sm mb-1">Stunting Prevalence</h4>' +
+                        '<div><i style="background: #ef4444; opacity: 0.7;"></i> High</div>' +
+                        '<div><i style="background: #f59e0b; opacity: 0.7;"></i> Moderate</div>';
+                    return div;
+                };
+                legend.addTo(map);
+
+
+                // User location marker
+                const userIcon = L.divIcon({
+                    html: '<div class="w-4 h-4 bg-blue-500 rounded-full border-2 border-white ring-4 ring-blue-500/50 shadow-md"></div>',
+                    className: '',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                });
+                L.marker(userLocation, { icon: userIcon, zIndexOffset: 1000 }).addTo(map).bindPopup("Your Location");
+
+                // Locker Icon
+                const lockerIcon = L.divIcon({
+                    html: `<svg class="w-8 h-8 text-gray-800 drop-shadow" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V8a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4z" clip-rule="evenodd" /></svg>`,
+                    className: 'transition-transform duration-300 hover:scale-125',
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16],
+                });
+                
+                // Add facility markers with custom popups
+                facilities.forEach(f => {
+                    const marker = L.marker([f.lat, f.lng], {icon: lockerIcon}).addTo(map);
+                    const popupContent = `
+                        <div class="w-48">
+                            <img src="${f.img}" alt="Locker Image" class="rounded-t-lg w-full h-auto">
+                            <div class="p-3">
+                                <p class="font-bold text-sm text-gray-800">Locker #${f.id}</p>
+                                <p class="text-xs text-gray-500">${f.name}</p>
+                                <p class="text-xs mt-2 text-blue-600 font-semibold">Ready for Health Scan</p>
+                            </div>
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent, { className: 'custom-leaflet-popup' });
+                });
+
+                let routeLayer = null;
+
+                // "Find Nearest" button logic
+                document.getElementById('findNearestBtn').addEventListener('click', () => {
+                    if (routeLayer) {
+                        map.removeLayer(routeLayer);
+                    }
+
+                    const nearestFacility = facilities[0];
+                    const routeCoords = [userLocation, [nearestFacility.lat, nearestFacility.lng]];
+
+                    const routeLines = [
+                        L.polyline(routeCoords, { color: '#3b82f6', weight: 8, opacity: 0.3 }),
+                        L.polyline(routeCoords, { color: '#3b82f6', weight: 4 })
+                    ];
+                    
+                    routeLayer = L.layerGroup(routeLines).addTo(map);
+                    map.flyToBounds(L.latLngBounds(routeCoords), { padding: [50, 50], duration: 1.5 });
+                });
+            }
+        }
+        
+        window.setup_droneDelivery = function() {
+            if (document.getElementById('droneMap') && typeof L !== 'undefined') {
+                if(map) map.remove(); 
+                const droneMap = L.map('droneMap', {zoomControl: false, interactive: false}).setView([-6.23, 106.8], 14);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© CARTO' }).addTo(droneMap);
+
+                const pharmacyLoc = [-6.24, 106.79];
+                const deliveryLoc = [-6.22, 106.81];
+
+                const pharmacyIcon = L.divIcon({ html: '🏥', className: 'text-3xl'});
+                const homeIcon = L.divIcon({ html: '🏠', className: 'text-3xl'});
+                
+                const droneIcon = L.divIcon({
+                    html: '🚁',
+                    className: 'text-4xl bg-transparent border-0',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 35] 
+                });
+
+                L.marker(pharmacyLoc, {icon: pharmacyIcon}).addTo(droneMap).bindPopup("Partner Pharmacy");
+                L.marker(deliveryLoc, {icon: homeIcon}).addTo(droneMap).bindPopup("Delivery Location");
+                
+                const droneMarker = L.marker(pharmacyLoc, {icon: droneIcon}).addTo(droneMap);
+                const route = [pharmacyLoc, [-6.23, 106.795], deliveryLoc];
+                const polyline = L.polyline(route, {color: 'blue', dashArray: '5, 10'}).addTo(droneMap);
+                droneMap.fitBounds(polyline.getBounds().pad(0.2));
+
+                const statusEl = document.getElementById('deliveryStatus');
+                const doneBtn = document.getElementById('deliveryDoneBtn');
+                let startTime = null;
+                const duration = 8000; // 8 seconds
+                
+                function animateDrone(timestamp) {
+                    if (!startTime) startTime = timestamp;
+                    const progress = Math.min((timestamp - startTime) / duration, 1);
+
+                    if (progress > 0.5 && statusEl.dataset.status !== 'pickup') {
+                        statusEl.innerHTML = `<p class="font-bold text-lg">🏪 Medicine Picked Up</p><p class="text-sm text-gray-600">Drone is on its way to you.</p>`;
+                        statusEl.dataset.status = 'pickup';
+                    }
+
+                    const newLatLng = L.latLng(
+                        pharmacyLoc[0] + (deliveryLoc[0] - pharmacyLoc[0]) * progress,
+                        pharmacyLoc[1] + (deliveryLoc[1] - pharmacyLoc[1]) * progress
+                    );
+                    droneMarker.setLatLng(newLatLng);
+                    
+                    if (progress < 1) {
+                         requestAnimationFrame(animateDrone);
+                    } else {
+                         statusEl.innerHTML = `<p class="font-bold text-lg text-green-600">✅ Medicine Arrived!</p><p class="text-sm text-gray-600">Your delivery is complete.</p>`;
+                         doneBtn.classList.remove('hidden');
+                    }
+                }
+
+                setTimeout(() => {
+                    statusEl.innerHTML = `<p class="font-bold text-lg">📍 Pharmacy Located</p><p class="text-sm text-gray-600">Deploying drone...</p>`;
+                    setTimeout(() => requestAnimationFrame(animateDrone), 2000);
+                }, 2000);
+            }
+        }
+
+        window.setup_orderTrackingLocker = function() {
+             const screen = document.getElementById('orderTrackingLocker');
+             screen.addEventListener('click', e => {
+                 if (e.target.classList.contains('tab-btn')) {
+                     const parent = e.target.closest('.figma-screen');
+                     parent.querySelectorAll('.tab-btn').forEach(btn => {
+                         btn.classList.remove('active', 'text-blue-600', 'border-blue-600', 'font-semibold');
+                         btn.classList.add('text-gray-500', 'border-transparent');
+                     });
+                     e.target.classList.add('active', 'text-blue-600', 'border-blue-600', 'font-semibold');
+                     e.target.classList.remove('text-gray-500', 'border-transparent');
+                     
+                     parent.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+                     parent.querySelector(`#${e.target.dataset.tab}`).classList.remove('hidden');
+                 }
+             });
+        }
+        
+        window.setup_payment = function() {
+            const paymentOptions = document.querySelectorAll('.payment-option');
+            const cardDetails = document.getElementById('card-details');
+            const qrisDetails = document.getElementById('qris-details');
+
+            paymentOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    paymentOptions.forEach(opt => opt.classList.remove('border-blue-500', 'border-2'));
+                    option.classList.add('border-blue-500', 'border-2');
+                    option.querySelector('input[type="radio"]').checked = true;
+
+                    if (option.dataset.method === 'card') {
+                        cardDetails.classList.remove('hidden');
+                        qrisDetails.classList.add('hidden');
+                    } else {
+                        cardDetails.classList.add('hidden');
+                        qrisDetails.classList.remove('hidden');
+                    }
+                });
+            });
+        };
+
+        // --- HELPER FUNCTIONS ---
+        function assessGrowth(ageMonths, gender, height, weight) {
+            // Simplified WHO growth standards for a ~29 month old
+            let score = 0;
+            const expectedHeight = (gender === "Male") ? 90.4 : 89.2; // 50th percentile height
+            const expectedWeight = (gender === "Male") ? 13.1 : 12.6; // 50th percentile weight
+            
+            if (height / expectedHeight < 0.94) score = -2; // Approx -2 SD for stunted
+            if (weight / expectedWeight < 0.85) score = -1; // Approx -2 SD for underweight
+            if (height / expectedHeight > 1.06) score = 1; // Approx +2 SD for tall
+            if (weight / expectedWeight > 1.15) score = 2; // Approx +2 SD for overweight
+
+            if (score <= -2) return { message: "🔴 High Risk", advice: "Possible stunting detected. Increase protein intake and consult a doctor.", color: "bg-red-100 text-red-800" };
+            if (score === -1) return { message: "🟡 Mild Risk", advice: "Child is underweight. Focus on nutrient-dense foods.", color: "bg-yellow-100 text-yellow-800" };
+            if (score >= 1) return { message: "🟡 Mild Risk", advice: "Child may be overweight. Focus on balanced meals and active play.", color: "bg-yellow-100 text-yellow-800" };
+            return { message: "🟢 Normal", advice: "Your child's growth is on track!", color: "bg-green-100 text-green-800" };
+        }
+
+        function openNotificationPanel() {
+            const panel = document.getElementById('notificationPanel');
+            const container = document.getElementById('notificationContainer');
+            const list = document.getElementById('notificationList');
+            const bell = document.getElementById('notificationBell');
+
+            // Populate list
+            list.innerHTML = appState.notifications.map(n => `
+                <div class="notification-item flex items-start gap-4 p-3 rounded-lg ${n.read ? 'bg-white' : 'bg-indigo-100'}">
+                    <div class="text-2xl">${n.icon}</div>
+                    <div class="flex-1">
+                        <p class="text-sm text-gray-800">${n.text}</p>
+                        <p class="text-xs text-gray-500 mt-1">${n.time}</p>
+                    </div>
+                    ${!n.read ? '<div class="w-2.5 h-2.5 bg-blue-500 rounded-full mt-1.5"></div>' : ''}
+                </div>
+            `).join('');
+
+            panel.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                container.classList.remove('-translate-y-full');
+            });
+            bell.classList.remove('new');
+        }
+
+        function closeNotificationPanel() {
+            const panel = document.getElementById('notificationPanel');
+            const container = document.getElementById('notificationContainer');
+            container.classList.add('-translate-y-full');
+            setTimeout(() => {
+                panel.classList.add('hidden');
+            }, 300);
+        }
+
+
+        // --- INITIALIZE APP ---
+        const qrModal = document.getElementById('qrModal');
+        const closeQrBtn = document.getElementById('closeQrBtn');
+        const notificationPanel = document.getElementById('notificationPanel');
+        const closeNotificationBtn = document.getElementById('closeNotificationBtn');
+        const markAllReadBtn = document.getElementById('markAllReadBtn');
+        
+        if (qrModal && closeQrBtn) {
+            const closeModal = () => qrModal.classList.add('hidden');
+            closeQrBtn.addEventListener('click', closeModal);
+            qrModal.addEventListener('click', (e) => {
+                if (e.target === qrModal) {
+                    closeModal();
+                }
+            });
+        }
+        
+        if (notificationPanel) {
+            notificationPanel.addEventListener('click', (e) => {
+                if (e.target === notificationPanel) {
+                    closeNotificationPanel();
+                }
+            });
+            closeNotificationBtn.addEventListener('click', closeNotificationPanel);
+            markAllReadBtn.addEventListener('click', () => {
+                appState.notifications.forEach(n => n.read = true);
+                openNotificationPanel(); // Re-render the panel to show changes
+                setTimeout(closeNotificationPanel, 1000);
+            });
+        }
+        
+        navigateTo('login');
+
+    });
+    </script>
+</body>
+</html>
+
+
+
+
+
